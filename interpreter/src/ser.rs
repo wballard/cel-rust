@@ -1000,6 +1000,7 @@ mod tests {
     // primitive_test!(test_triple_double_quoted_string, #"r"""""""#, "");
     // primitive_test!(test_triple_single_quoted_string, "r''''''", "");
     primitive_test!(test_utf8_character_as_bytes, "b'ÿ'", vec!(195_u8, 191_u8));
+    primitive_test!(test_ulid, "01JDCKSKY69ZQ9RQ8PWTF9ZQNK", ulid::Ulid::from_string("01JDCKSKY69ZQ9RQ8PWTF9ZQNK").unwrap());
 
     #[test]
     fn test_json_data_conversion() {

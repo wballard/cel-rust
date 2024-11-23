@@ -397,6 +397,12 @@ impl<K: Into<Key>, V: Into<Value>> From<HashMap<K, V>> for Value {
     }
 }
 
+impl From<ulid::Ulid> for Value {
+    fn from(ulid: ulid::Ulid) -> Self {
+        Value::Ulid(ulid)
+    }
+}
+
 impl From<ExecutionError> for ResolveResult {
     fn from(value: ExecutionError) -> Self {
         Err(value)
@@ -987,7 +993,10 @@ mod tests {
         let program = Program::compile("01JDCHE5FVVR8ADKC040GFKZJH").unwrap();
         let context = Context::default();
         let result = program.execute(&context);
-        assert_eq!(result.unwrap(), Value::Ulid(ulid::Ulid::from_string("01JDCHE5FVVR8ADKC040GFKZJH").unwrap()));
+        assert_eq!(
+            result.unwrap(),
+            Value::Ulid(ulid::Ulid::from_string("01JDCHE5FVVR8ADKC040GFKZJH").unwrap())
+        );
     }
 
     #[test]
@@ -998,7 +1007,7 @@ mod tests {
         let result = program.execute(&context);
         assert_eq!(result.unwrap(), Value::Bool(true));
     }
-    
+
     #[test]
     fn ulid_ordering() {
         let program =
