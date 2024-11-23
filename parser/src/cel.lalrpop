@@ -1,5 +1,6 @@
 use crate::{RelationOp, ArithmeticOp, Expression, UnaryOp, Member, Atom, parse_bytes, parse_string};
 use std::sync::Arc;
+use ulid::Ulid;
 
 grammar;
 
@@ -8,6 +9,9 @@ match {
    r"\s*" => { },
    r"//[^\n\r]*[\n\r]*" => { },
 } else {
+    r"[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}" => ULID,
+} else {
+    r"-?[0-9]+" => INT,
    _
 }
 
@@ -121,7 +125,7 @@ RelationOp: RelationOp = {
 
 Atom: Atom = {
     // Integer literals. Annoying to parse :/
-    r"-?[0-9]+" => Atom::Int(<>.parse().unwrap()),
+    INT => Atom::Int(<>.parse().unwrap()),
     <s:r"-?0[xX][0-9a-fA-F]+"> => Atom::Int(i64::from_str_radix(&s.chars().filter(|&x| x != 'x' && x != 'X').collect::<String>(), 16).unwrap()),
     <s:r"[0-9]+[uU]"> => Atom::UInt(s[..s.len()-1].parse().unwrap()),
     <s:r"-?0[xX][0-9a-fA-F]+[uU]"> => Atom::UInt(u64::from_str_radix(&s.chars().filter(|&x| x != 'x' && x != 'X' && x != 'u' && x != 'U').collect::<String>(), 16).unwrap()),
@@ -165,6 +169,8 @@ Atom: Atom = {
     "true" => Atom::Bool(true),
     "false" => Atom::Bool(false),
     "null" => Atom::Null,
+    // ULID in base 32
+    ULID => Atom::Ulid(Ulid::from_string(<>).unwrap().into()),
 };
 
 Ident: Arc<String> = {

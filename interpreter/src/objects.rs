@@ -172,6 +172,7 @@ pub enum Value {
     #[cfg(feature = "chrono")]
     Timestamp(chrono::DateTime<chrono::FixedOffset>),
     Null,
+    Ulid(ulid::Ulid),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -188,6 +189,7 @@ pub enum ValueType {
     Duration,
     Timestamp,
     Null,
+    Ulid,
 }
 
 impl Display for ValueType {
@@ -205,6 +207,7 @@ impl Display for ValueType {
             ValueType::Duration => write!(f, "duration"),
             ValueType::Timestamp => write!(f, "timestamp"),
             ValueType::Null => write!(f, "null"),
+            ValueType::Ulid => write!(f, "ulid"),
         }
     }
 }
@@ -226,6 +229,7 @@ impl Value {
             #[cfg(feature = "chrono")]
             Value::Timestamp(_) => ValueType::Timestamp,
             Value::Null => ValueType::Null,
+            Value::Ulid(_) => ValueType::Ulid,
         }
     }
 
@@ -275,6 +279,7 @@ impl PartialEq for Value {
             (Value::UInt(a), Value::Float(b)) => (*a as f64) == *b,
             (Value::Float(a), Value::Int(b)) => *a == (*b as f64),
             (Value::Float(a), Value::UInt(b)) => *a == (*b as f64),
+            (Value::Ulid(a), Value::Ulid(b)) => a == b,
             (_, _) => false,
         }
     }
@@ -314,6 +319,7 @@ impl PartialOrd for Value {
             (Value::UInt(a), Value::Float(b)) => (*a as f64).partial_cmp(b),
             (Value::Float(a), Value::Int(b)) => a.partial_cmp(&(*b as f64)),
             (Value::Float(a), Value::UInt(b)) => a.partial_cmp(&(*b as f64)),
+            (Value::Ulid(a), Value::Ulid(b)) => a.partial_cmp(b),
             _ => None,
         }
     }
@@ -651,6 +657,7 @@ impl<'a> Value {
             #[cfg(feature = "chrono")]
             Value::Timestamp(v) => v.timestamp_nanos_opt().unwrap_or_default() > 0,
             Value::Function(_, _) => false,
+            Value::Ulid(_) => true,
         }
     }
 }
@@ -666,6 +673,7 @@ impl From<&Atom> for Value {
             Atom::Bytes(v) => Value::Bytes(v.clone()),
             Atom::Bool(v) => Value::Bool(*v),
             Atom::Null => Value::Null,
+            Atom::Ulid(v) => Value::Ulid(*v),
         }
     }
 }
@@ -972,5 +980,31 @@ mod tests {
                 "example"
             )))]))
         );
+    }
+
+    #[test]
+    fn ulid_value() {
+        let program = Program::compile("01JDCHE5FVVR8ADKC040GFKZJH").unwrap();
+        let context = Context::default();
+        let result = program.execute(&context);
+        assert_eq!(result.unwrap(), Value::Ulid(ulid::Ulid::from_string("01JDCHE5FVVR8ADKC040GFKZJH").unwrap()));
+    }
+
+    #[test]
+    fn ulid_equality() {
+        let program =
+            Program::compile("01JDCHE5FVVR8ADKC040GFKZJH == 01JDCHE5FVVR8ADKC040GFKZJH").unwrap();
+        let context = Context::default();
+        let result = program.execute(&context);
+        assert_eq!(result.unwrap(), Value::Bool(true));
+    }
+    
+    #[test]
+    fn ulid_ordering() {
+        let program =
+            Program::compile("01JDCHE5FVVR8ADKC040GFKZJJ > 01JDCHE5FVVR8ADKC040GFKZJH").unwrap();
+        let context = Context::default();
+        let result = program.execute(&context);
+        assert_eq!(result.unwrap(), Value::Bool(true));
     }
 }

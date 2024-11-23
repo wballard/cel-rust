@@ -39,6 +39,8 @@ pub fn parse(input: &str) -> Result<Expression, ParseError> {
 
 #[cfg(test)]
 mod tests {
+    use ulid::Ulid;
+
     use crate::{
         ArithmeticOp, Atom, Atom::*, Expression, Expression::*, Member::*, RelationOp, UnaryOp,
     };
@@ -545,5 +547,17 @@ mod tests {
         assert_eq!(err.span.start.as_ref().unwrap().column, 31);
         assert_eq!(err.span.end.as_ref().unwrap().line, 1);
         assert_eq!(err.span.end.as_ref().unwrap().column, 31);
+    }
+
+    #[test]
+    fn test_ulid() {
+        assert_parse_eq(
+            "01D39ZY06FGSCTVN4T2V9PKHFZ",
+            Atom(
+                Ulid::from_string("01D39ZY06FGSCTVN4T2V9PKHFZ")
+                    .unwrap()
+                    .into(),
+            ),
+        )
     }
 }

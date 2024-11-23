@@ -65,6 +65,13 @@ pub enum Atom {
     Bytes(Arc<Vec<u8>>),
     Bool(bool),
     Null,
+    Ulid(ulid::Ulid),
+}
+
+impl From<ulid::Ulid> for Atom {
+    fn from(ulid: ulid::Ulid) -> Self {
+        Atom::Ulid(ulid)
+    }
 }
 
 /// A collection of all the references that an expression makes to variables and functions.
