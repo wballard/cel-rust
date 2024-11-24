@@ -6,7 +6,6 @@ use crate::ExecutionError;
 use cel_parser::Expression;
 use std::cmp::Ordering;
 use std::convert::TryInto;
-use std::sync::Arc;
 
 type Result<T> = std::result::Result<T, ExecutionError>;
 
@@ -17,7 +16,7 @@ type Result<T> = std::result::Result<T, ExecutionError>;
 /// to variables, and the arguments to the function call.
 #[derive(Clone)]
 pub struct FunctionContext<'context> {
-    pub name: Arc<String>,
+    pub name: String,
     pub this: Option<Value>,
     pub ptx: &'context Context<'context>,
     pub args: Vec<Expression>,
@@ -26,7 +25,7 @@ pub struct FunctionContext<'context> {
 
 impl<'context> FunctionContext<'context> {
     pub fn new(
-        name: Arc<String>,
+        name: String,
         this: Option<Value>,
         ptx: &'context Context<'context>,
         args: Vec<Expression>,
@@ -73,15 +72,16 @@ impl<'context> FunctionContext<'context> {
 /// ```skip
 /// 'foobar'.size() == 6
 /// ```
-pub fn size(ftx: &FunctionContext, This(this): This<Value>) -> Result<i64> {
+pub fn size(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
     let size = match this {
         Value::List(l) => l.len(),
         Value::Map(m) => m.map.len(),
         Value::String(s) => s.len(),
         Value::Bytes(b) => b.len(),
+        Value::Number(_) => 1,
         value => return Err(ftx.error(format!("cannot determine the size of {:?}", value))),
     };
-    Ok(size as i64)
+    Ok(Value::Number(size.into()))
 }
 
 /// Returns true if the target contains the provided argument. The actual behavior
@@ -156,70 +156,9 @@ pub fn string(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
         Value::Timestamp(t) => Value::String(t.to_rfc3339().into()),
         #[cfg(feature = "chrono")]
         Value::Duration(v) => Value::String(crate::duration::format_duration(&v).into()),
-        Value::Int(v) => Value::String(v.to_string().into()),
-        Value::UInt(v) => Value::String(v.to_string().into()),
-        Value::Float(v) => Value::String(v.to_string().into()),
-        Value::Bytes(v) => Value::String(Arc::new(String::from_utf8_lossy(v.as_slice()).into())),
+        Value::Number(v) => Value::String(v.to_string().into()),
+        Value::Bytes(v) => Value::String(String::from_utf8_lossy(v.as_slice()).into()),
         v => return Err(ftx.error(format!("cannot convert {:?} to string", v))),
-    })
-}
-
-pub fn bytes(value: Arc<String>) -> Result<Value> {
-    Ok(Value::Bytes(value.as_bytes().to_vec().into()))
-}
-
-// Performs a type conversion on the target.
-pub fn double(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
-    Ok(match this {
-        Value::String(v) => v
-            .parse::<f64>()
-            .map(Value::Float)
-            .map_err(|e| ftx.error(format!("string parse error: {e}")))?,
-        Value::Float(v) => Value::Float(v),
-        Value::Int(v) => Value::Float(v as f64),
-        Value::UInt(v) => Value::Float(v as f64),
-        v => return Err(ftx.error(format!("cannot convert {:?} to double", v))),
-    })
-}
-
-// Performs a type conversion on the target.
-pub fn uint(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
-    Ok(match this {
-        Value::String(v) => v
-            .parse::<u64>()
-            .map(Value::UInt)
-            .map_err(|e| ftx.error(format!("string parse error: {e}")))?,
-        Value::Float(v) => {
-            if v > u64::MAX as f64 || v < u64::MIN as f64 {
-                return Err(ftx.error("unsigned integer overflow"));
-            }
-            Value::UInt(v as u64)
-        }
-        Value::Int(v) => Value::UInt(
-            v.try_into()
-                .map_err(|_| ftx.error("unsigned integer overflow"))?,
-        ),
-        Value::UInt(v) => Value::UInt(v),
-        v => return Err(ftx.error(format!("cannot convert {:?} to uint", v))),
-    })
-}
-
-// Performs a type conversion on the target.
-pub fn int(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
-    Ok(match this {
-        Value::String(v) => v
-            .parse::<i64>()
-            .map(Value::Int)
-            .map_err(|e| ftx.error(format!("string parse error: {e}")))?,
-        Value::Float(v) => {
-            if v > i64::MAX as f64 || v < i64::MIN as f64 {
-                return Err(ftx.error("integer overflow"));
-            }
-            Value::Int(v as i64)
-        }
-        Value::Int(v) => Value::Int(v),
-        Value::UInt(v) => Value::Int(v.try_into().map_err(|_| ftx.error("integer overflow"))?),
-        v => return Err(ftx.error(format!("cannot convert {:?} to int", v))),
     })
 }
 
@@ -229,8 +168,10 @@ pub fn int(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
 /// ```cel
 /// "abc".startsWith("a") == true
 /// ```
-pub fn starts_with(This(this): This<Arc<String>>, prefix: Arc<String>) -> bool {
-    this.starts_with(prefix.as_str())
+pub fn starts_with(This(this): This<Value>, prefix: Value) -> bool {
+    let seek: String = this.into();
+    let sought: String = prefix.into();
+    seek.starts_with(&sought)
 }
 
 /// Returns true if a string ends with another string.
@@ -239,8 +180,10 @@ pub fn starts_with(This(this): This<Arc<String>>, prefix: Arc<String>) -> bool {
 /// ```cel
 /// "abc".endsWith("c") == true
 /// ```
-pub fn ends_with(This(this): This<Arc<String>>, suffix: Arc<String>) -> bool {
-    this.ends_with(suffix.as_str())
+pub fn ends_with(This(this): This<Value>, suffix: Value) -> bool {
+    let seek: String = this.into();
+    let sought: String = suffix.into();
+    seek.ends_with(&sought)
 }
 
 /// Returns true if a string matches the regular expression.
@@ -250,14 +193,12 @@ pub fn ends_with(This(this): This<Arc<String>>, suffix: Arc<String>) -> bool {
 /// "abc".matches("^[a-z]*$") == true
 /// ```
 #[cfg(feature = "regex")]
-pub fn matches(
-    ftx: &FunctionContext,
-    This(this): This<Arc<String>>,
-    regex: Arc<String>,
-) -> Result<bool> {
-    match regex::Regex::new(&regex) {
-        Ok(re) => Ok(re.is_match(&this)),
-        Err(err) => Err(ftx.error(format!("'{regex}' not a valid regex:\n{err}"))),
+pub fn matches(ftx: &FunctionContext, This(this): This<Value>, regex: Value) -> Result<bool> {
+    let haystack: String = this.into();
+    let pattern: String = regex.into();
+    match regex::Regex::new(&pattern) {
+        Ok(re) => Ok(re.is_match(&haystack)),
+        Err(err) => Err(ftx.error(format!("'{pattern}' not a valid regex:\n{err}"))),
     }
 }
 
@@ -312,7 +253,7 @@ pub fn map(
                 let value = ptx.resolve(&expr)?;
                 values.push(value);
             }
-            Value::List(Arc::new(values))
+            Value::List(values)
         }
         Value::Map(map) => {
             let mut values = Vec::with_capacity(map.map.len());
@@ -322,7 +263,7 @@ pub fn map(
                 let value = ptx.resolve(&expr)?;
                 values.push(value);
             }
-            Value::List(Arc::new(values))
+            Value::List(values)
         }
         _ => return Err(this.error_expected_type(ValueType::List)),
     }
@@ -356,7 +297,7 @@ pub fn filter(
                     values.push(item.clone());
                 }
             }
-            Value::List(Arc::new(values))
+            Value::List(values)
         }
         _ => return Err(this.error_expected_type(ValueType::List)),
     }
@@ -514,7 +455,6 @@ pub mod time {
     use crate::magic::This;
     use crate::{ExecutionError, Value};
     use chrono::{Datelike, Days, Months, Timelike};
-    use std::sync::Arc;
 
     /// Duration parses the provided argument into a [`Value::Duration`] value.
     ///
@@ -531,15 +471,17 @@ pub mod time {
     /// - `1.5ms` parses as 1 millisecond and 500 microseconds
     /// - `1ns` parses as 1 nanosecond
     /// - `1.5ns` parses as 1 nanosecond (sub-nanosecond durations not supported)
-    pub fn duration(value: Arc<String>) -> crate::functions::Result<Value> {
-        Ok(Value::Duration(_duration(value.as_str())?))
+    pub fn duration(value: Value) -> crate::functions::Result<Value> {
+        let stringify: String = value.into();
+        Ok(Value::Duration(_duration(&stringify)?))
     }
 
     /// Timestamp parses the provided argument into a [`Value::Timestamp`] value.
     /// The
-    pub fn timestamp(value: Arc<String>) -> Result<Value> {
+    pub fn timestamp(value: Value) -> Result<Value> {
+        let stringify: String = value.into();
         Ok(Value::Timestamp(
-            chrono::DateTime::parse_from_rfc3339(value.as_str())
+            chrono::DateTime::parse_from_rfc3339(&stringify)
                 .map_err(|e| ExecutionError::function_error("timestamp", e.to_string().as_str()))?,
         ))
     }
@@ -960,49 +902,6 @@ mod tests {
             ("int", "10.string() == '10'"),
             ("float", "10.5.string() == '10.5'"),
             ("bytes", "b'foo'.string() == 'foo'"),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
-    fn test_bytes() {
-        [
-            ("string", "bytes('abc') == b'abc'"),
-            ("bytes", "bytes('abc') == b'\\x61b\\x63'"),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
-    fn test_double() {
-        [
-            ("string", "'10'.double() == 10.0"),
-            ("int", "10.double() == 10.0"),
-            ("double", "10.0.double() == 10.0"),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
-    fn test_uint() {
-        [
-            ("string", "'10'.uint() == 10.uint()"),
-            ("double", "10.5.uint() == 10.uint()"),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
-    fn test_int() {
-        [
-            ("string", "'10'.int() == 10"),
-            ("int", "10.int() == 10"),
-            ("uint", "10.uint().int() == 10"),
-            ("double", "10.5.int() == 10"),
         ]
         .iter()
         .for_each(assert_script);

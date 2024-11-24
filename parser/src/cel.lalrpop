@@ -1,6 +1,7 @@
 use crate::{RelationOp, ArithmeticOp, Expression, UnaryOp, Member, Atom, parse_bytes, parse_string};
-use std::sync::Arc;
+use std::str::FromStr;
 use ulid::Ulid;
+use rust_decimal::Decimal;
 
 grammar;
 
@@ -75,7 +76,7 @@ pub Primary: Expression = {
     "(" <Expression> ")"
 }
 
-pub FieldInits: (Arc<String>, Expression) = {
+pub FieldInits: (String, Expression) = {
     <Ident> ":" <Expression>
 }
 
@@ -124,16 +125,14 @@ RelationOp: RelationOp = {
 }
 
 Atom: Atom = {
-    // Integer literals. Annoying to parse :/
-    INT => Atom::Int(<>.parse().unwrap()),
-    <s:r"-?0[xX][0-9a-fA-F]+"> => Atom::Int(i64::from_str_radix(&s.chars().filter(|&x| x != 'x' && x != 'X').collect::<String>(), 16).unwrap()),
-    <s:r"[0-9]+[uU]"> => Atom::UInt(s[..s.len()-1].parse().unwrap()),
-    <s:r"-?0[xX][0-9a-fA-F]+[uU]"> => Atom::UInt(u64::from_str_radix(&s.chars().filter(|&x| x != 'x' && x != 'X' && x != 'u' && x != 'U').collect::<String>(), 16).unwrap()),
-
-    // Float with decimals and optional exponent
-    r"([-+]?[0-9]*\.[0-9]+([eE][-+]?[0-9]+)?)" => Atom::Float(<>.parse().unwrap()),
-    // Float with no decimals and required exponent
-    r"[-+]?[0-9]+[eE][-+]?[0-9]+" => Atom::Float(<>.parse().unwrap()),
+    INT => Atom::Number(Decimal::from_str(<>).unwrap()),
+    <s:r"-?0[xX][0-9a-fA-F]+"> => Atom::Number(Decimal::from_str_radix(&s.chars().filter(|&x| x != 'x' && x != 'X').collect::<String>(), 16).unwrap()),
+    // Plain floats
+    r"[-+]?[0-9]*\.[0-9]+" => Atom::Number(Decimal::from_str(<>).unwrap()),
+    // Scientific with decimals
+    r"([-+]?[0-9]*\.[0-9]+([eE][-+]?[0-9]+))" => Atom::Number(Decimal::from_scientific(<>).unwrap()),
+    // Scientific with no decimals
+    r"[-+]?[0-9]+[eE][-+]?[0-9]+" => Atom::Number(Decimal::from_scientific(<>).unwrap()),
 
     // NOTE: I've commented out some of the more complex string parsing rules
     // because they're causing "attempt to subtract with overflow" errors within
@@ -150,29 +149,26 @@ Atom: Atom = {
     //   3. `"`: Match the closing double quote.
     r#""([^"\\]*(?:\\.[^"\\]*)*)""# => Atom::String(parse_string(<>).unwrap().into()),
     r#"[rR]"([^"\\]*(?:\\.[^"\\]*)*)""# => Atom::String(parse_string(<>).unwrap().into()),
-    // r#""""(\\.|[^"{3}])*""""# => Atom::String(<>.to_string().into()),
 
     // Single quoted string
     // Uses similar regex as above, but replace double quote with a single one
     r#"'([^'\\]*(?:\\.[^'\\]*)*)'"# => Atom::String(parse_string(<>).unwrap().into()),
     r#"[rR]'([^'\\]*(?:\\.[^'\\]*)*)'"# => Atom::String(parse_string(<>).unwrap().into()),
-    // r#"'''(\\.|[^'{3}])*'''"# => Atom::String(<>.to_string().into()),
 
     // Double quoted bytes
     r#"[bB]"(\\.|[^"\n])*""# => Atom::Bytes(parse_bytes(&<>[2..<>.len()-1]).unwrap().into()),
-    // r#"[bB]"""(\\.|[^"{3}])*""""# => Atom::Bytes(Vec::from(<>.as_bytes()).into()),
 
     // Single quoted bytes
     r#"[bB]'(\\.|[^'\n])*'"# => Atom::Bytes(parse_bytes(&<>[2..<>.len()-1]).unwrap().into()),
-    // r#"[bB]'''(\\.|[^'{3}])*'''"# => Atom::Bytes(Vec::from(<>.as_bytes()).into()),
 
     "true" => Atom::Bool(true),
     "false" => Atom::Bool(false),
     "null" => Atom::Null,
+
     // ULID in base 32
     ULID => Atom::Ulid(Ulid::from_string(<>).unwrap().into()),
 };
 
-Ident: Arc<String> = {
-    r"[_a-zA-Z][_a-zA-Z0-9]*" => Arc::from(<>.to_string())
+Ident: String = {
+    r"[_a-zA-Z][_a-zA-Z0-9]*" => <>.to_string()
 }

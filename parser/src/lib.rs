@@ -20,18 +20,6 @@ lalrpop_mod!(#[allow(clippy::all)] pub parser, "/cel.rs");
 /// println!("{:?}", expr);
 /// ```
 pub fn parse(input: &str) -> Result<Expression, ParseError> {
-    // Wrap the internal parser function - whether larlpop or chumsky
-
-    // Example for a possible new chumsky based parser...
-    // parser().parse(input)
-    //     .into_result()
-    //     .map_err(|e|  {
-    //         ParseError {
-    //             msg: e.iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join("\n")
-    //         }
-    //     })
-
-    // Existing Larlpop Parser:
     crate::parser::ExpressionParser::new()
         .parse(input)
         .map_err(|e| ParseError::from_lalrpop(input, e))
@@ -39,6 +27,7 @@ pub fn parse(input: &str) -> Result<Expression, ParseError> {
 
 #[cfg(test)]
 mod tests {
+    use rust_decimal_macros::dec;
     use ulid::Ulid;
 
     use crate::{
@@ -61,19 +50,19 @@ mod tests {
 
     #[test]
     fn simple_int() {
-        assert_parse_eq("1", Atom(Int(1)))
+        assert_parse_eq("1", Atom(Number(dec!(1))))
     }
 
     #[test]
     fn simple_float() {
-        assert_parse_eq("1.0", Atom(Float(1.0)))
+        assert_parse_eq("1.0", Atom(Number(dec!(1.0))))
     }
 
     #[test]
     fn other_floats() {
-        assert_parse_eq("1e3", Expression::Atom(Atom::Float(1000.0)));
-        assert_parse_eq("1e-3", Expression::Atom(Atom::Float(0.001)));
-        assert_parse_eq("1.4e-3", Expression::Atom(Atom::Float(0.0014)));
+        assert_parse_eq("1e3", Expression::Atom(Atom::Number(dec!(1000.0))));
+        assert_parse_eq("1e-3", Expression::Atom(Atom::Number(dec!(0.001))));
+        assert_parse_eq("1.4e-3", Expression::Atom(Atom::Number(dec!(0.0014))));
     }
 
     #[test]
@@ -135,16 +124,16 @@ mod tests {
             FunctionCall(
                 Box::new(Ident("map".to_string().into())),
                 Some(Box::new(List(vec![
-                    Atom(Int(1)),
-                    Atom(Int(2)),
-                    Atom(Int(3)),
+                    Atom(Number(dec!(1))),
+                    Atom(Number(dec!(2))),
+                    Atom(Number(dec!(3))),
                 ]))),
                 vec![
                     Ident("x".to_string().into()),
                     Arithmetic(
                         Box::new(Ident("x".to_string().into())),
                         ArithmeticOp::Multiply,
-                        Box::new(Atom(Int(2))),
+                        Box::new(Atom(Number(dec!(2)))),
                     ),
                 ],
             ),
@@ -161,7 +150,7 @@ mod tests {
                     Attribute("b".to_string().into()).into(),
                 )
                 .into(),
-                Index(Atom(Int(1)).into()).into(),
+                Index(Atom(Number(dec!(1))).into()).into(),
             ),
         )
     }
@@ -213,7 +202,10 @@ mod tests {
     fn delimited_expressions() {
         assert_parse_eq(
             "(-((1)))",
-            Unary(UnaryOp::Minus, Box::new(Expression::Atom(Atom::Int(1)))),
+            Unary(
+                UnaryOp::Minus,
+                Box::new(Expression::Atom(Atom::Number(dec!(1)))),
+            ),
         );
     }
 
@@ -227,9 +219,9 @@ mod tests {
         assert_parse_eq(
             "[1,2,3]",
             List(vec![
-                Expression::Atom(Atom::Int(1)),
-                Expression::Atom(Atom::Int(2)),
-                Expression::Atom(Atom::Int(3)),
+                Expression::Atom(Atom::Number(dec!(1))),
+                Expression::Atom(Atom::Number(dec!(2))),
+                Expression::Atom(Atom::Number(dec!(3))),
             ]),
         );
     }
@@ -240,11 +232,11 @@ mod tests {
             "[1,2,3][0]",
             Member(
                 Box::new(List(vec![
-                    Expression::Atom(Int(1)),
-                    Expression::Atom(Int(2)),
-                    Expression::Atom(Int(3)),
+                    Expression::Atom(Number(dec!(1))),
+                    Expression::Atom(Number(dec!(2))),
+                    Expression::Atom(Number(dec!(3))),
                 ])),
-                Box::new(Index(Box::new(Expression::Atom(Int(0))))),
+                Box::new(Index(Box::new(Expression::Atom(Number(dec!(0)))))),
             ),
         );
     }
@@ -253,12 +245,10 @@ mod tests {
     fn mixed_type_list() {
         assert_parse_eq(
             "['0', 1, 3.0, null]",
-            //"['0', 1, 2u, 3.0, null]",
             List(vec![
                 Expression::Atom(String("0".to_string().into())),
-                Expression::Atom(Int(1)),
-                //Expression::Atom(UInt(2)),
-                Expression::Atom(Float(3.0)),
+                Expression::Atom(Number(dec!(1))),
+                Expression::Atom(Number(dec!(3.0))),
                 Expression::Atom(Null),
             ]),
         );
@@ -271,7 +261,7 @@ mod tests {
             List(vec![
                 List(vec![]),
                 List(vec![]),
-                List(vec![List(vec![Expression::Atom(Int(1))])]),
+                List(vec![List(vec![Expression::Atom(Number(dec!(1)))])]),
             ]),
         );
     }
@@ -281,9 +271,9 @@ mod tests {
         assert_parse_eq(
             "2 in [2]",
             Relation(
-                Box::new(Expression::Atom(Int(2))),
+                Box::new(Expression::Atom(Number(dec!(2)))),
                 RelationOp::In,
-                Box::new(List(vec![Expression::Atom(Int(2))])),
+                Box::new(List(vec![Expression::Atom(Number(dec!(2)))])),
             ),
         );
     }
@@ -300,11 +290,11 @@ mod tests {
             Map(vec![
                 (
                     Expression::Atom(String("a".to_string().into())),
-                    Expression::Atom(Int(1)),
+                    Expression::Atom(Number(dec!(1))),
                 ),
                 (
                     Expression::Atom(String("b".to_string().into())),
-                    Expression::Atom(Int(2)),
+                    Expression::Atom(Number(dec!(2))),
                 ),
             ]),
         );
@@ -318,14 +308,14 @@ mod tests {
                 Box::new(Map(vec![
                     (
                         Expression::Atom(String("a".to_string().into())),
-                        Expression::Atom(Int(1)),
+                        Expression::Atom(Number(dec!(1))),
                     ),
                     (
                         Expression::Atom(String("b".to_string().into())),
-                        Expression::Atom(Int(2)),
+                        Expression::Atom(Number(dec!(2))),
                     ),
                 ])),
-                Box::new(Index(Box::new(Expression::Atom(Int(0))))),
+                Box::new(Index(Box::new(Expression::Atom(Number(dec!(0)))))),
             ),
         );
     }
@@ -335,35 +325,35 @@ mod tests {
         assert_parse_eq(
             "2 != 3",
             Relation(
-                Box::new(Expression::Atom(Int(2))),
+                Box::new(Expression::Atom(Number(dec!(2)))),
                 RelationOp::NotEquals,
-                Box::new(Expression::Atom(Int(3))),
+                Box::new(Expression::Atom(Number(dec!(3)))),
             ),
         );
         assert_parse_eq(
             "2 == 3",
             Relation(
-                Box::new(Expression::Atom(Int(2))),
+                Box::new(Expression::Atom(Number(dec!(2)))),
                 RelationOp::Equals,
-                Box::new(Expression::Atom(Int(3))),
+                Box::new(Expression::Atom(Number(dec!(3)))),
             ),
         );
 
         assert_parse_eq(
             "2 < 3",
             Relation(
-                Box::new(Expression::Atom(Int(2))),
+                Box::new(Expression::Atom(Number(dec!(2)))),
                 RelationOp::LessThan,
-                Box::new(Expression::Atom(Int(3))),
+                Box::new(Expression::Atom(Number(dec!(3)))),
             ),
         );
 
         assert_parse_eq(
             "2 <= 3",
             Relation(
-                Box::new(Expression::Atom(Int(2))),
+                Box::new(Expression::Atom(Number(dec!(2)))),
                 RelationOp::LessThanEq,
-                Box::new(Expression::Atom(Int(3))),
+                Box::new(Expression::Atom(Number(dec!(3)))),
             ),
         );
     }
@@ -373,9 +363,9 @@ mod tests {
         assert_parse_eq(
             "2 * 3",
             Arithmetic(
-                Box::new(Expression::Atom(Atom::Int(2))),
+                Box::new(Expression::Atom(Atom::Number(dec!(2)))),
                 ArithmeticOp::Multiply,
-                Box::new(Expression::Atom(Atom::Int(3))),
+                Box::new(Expression::Atom(Atom::Number(dec!(3)))),
             ),
         );
     }
@@ -385,11 +375,11 @@ mod tests {
     //     assert_parse_eq(
     //         "2 * -3",
     //         Arithmetic(
-    //             Box::new(Expression::Atom(Atom::Int(2))),
+    //             Box::new(Expression::Atom(Atom::Number(dec!(2)))),
     //             ArithmeticOp::Multiply,
     //             Box::new(Unary(
     //                 UnaryOp::Minus,
-    //                 Box::new(Expression::Atom(Atom::Int(3))),
+    //                 Box::new(Expression::Atom(Atom::Number(dec!(3)))),
     //             )),
     //         ),
     //     );
@@ -397,11 +387,11 @@ mod tests {
     //     assert_parse_eq(
     //         "2 / -3",
     //         Arithmetic(
-    //             Box::new(Expression::Atom(Int(2))),
+    //             Box::new(Expression::Atom(Number(dec!(2)))),
     //             ArithmeticOp::Divide,
     //             Box::new(Unary(
     //                 UnaryOp::Minus,
-    //                 Box::new(Expression::Atom(Int(3))),
+    //                 Box::new(Expression::Atom(Number(dec!(3)))),
     //             )),
     //         ),
     //     );
@@ -412,20 +402,20 @@ mod tests {
         assert_parse_eq(
             "2 + 3",
             Arithmetic(
-                Box::new(Expression::Atom(Atom::Int(2))),
+                Box::new(Expression::Atom(Atom::Number(dec!(2)))),
                 ArithmeticOp::Add,
-                Box::new(Expression::Atom(Atom::Int(3))),
+                Box::new(Expression::Atom(Atom::Number(dec!(3)))),
             ),
         );
 
         // assert_parse_eq(
         //     "2 - -3",
         //     Arithmetic(
-        //         Box::new(Expression::Atom(Atom::Int(2))),
+        //         Box::new(Expression::Atom(Atom::Number(dec!(2)))),
         //         ArithmeticOp::Subtract,
         //         Box::new(Unary(
         //             UnaryOp::Minus,
-        //             Box::new(Expression::Atom(Atom::Int(3))),
+        //             Box::new(Expression::Atom(Atom::Number(dec!(3)))),
         //         )),
         //     ),
         // );
@@ -463,8 +453,8 @@ mod tests {
             "true ? 100 : 200",
             Ternary(
                 Box::new(Expression::Atom(Bool(true))),
-                Box::new(Expression::Atom(Int(100))),
-                Box::new(Expression::Atom(Int(200))),
+                Box::new(Expression::Atom(Number(dec!(100)))),
+                Box::new(Expression::Atom(Number(dec!(200)))),
             ),
         );
     }

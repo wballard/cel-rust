@@ -147,9 +147,8 @@ impl<'a> Context<'a> {
     ///
     /// # Example
     /// ```
-    /// use cel_interpreter::Context;
+    /// use cel_interpreter::{Context, Value};
     /// let mut context = Context::empty();
-    /// context.add_function("add", |a: i64, b: i64| a + b);
     /// ```
     pub fn empty() -> Self {
         Context::Root {
@@ -176,12 +175,8 @@ impl<'a> Default for Context<'a> {
         ctx.add_function("startsWith", functions::starts_with);
         ctx.add_function("endsWith", functions::ends_with);
         ctx.add_function("string", functions::string);
-        ctx.add_function("bytes", functions::bytes);
-        ctx.add_function("double", functions::double);
         ctx.add_function("exists", functions::exists);
         ctx.add_function("exists_one", functions::exists_one);
-        ctx.add_function("int", functions::int);
-        ctx.add_function("uint", functions::uint);
 
         #[cfg(feature = "regex")]
         ctx.add_function("matches", functions::matches);

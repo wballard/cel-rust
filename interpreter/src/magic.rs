@@ -4,16 +4,13 @@ use crate::{ExecutionError, FunctionContext, ResolveResult, Value};
 use cel_parser::Expression;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 impl_conversions!(
-    i64 => Value::Int,
-    u64 => Value::UInt,
-    f64 => Value::Float,
-    Arc<String> => Value::String,
-    Arc<Vec<u8>> => Value::Bytes,
+    rust_decimal::Decimal => Value::Number,
+    String => Value::String,
+    Vec<u8> => Value::Bytes,
     bool => Value::Bool,
-    Arc<Vec<Value>> => Value::List
+    Vec<Value> => Value::List
 );
 
 #[cfg(feature = "chrono")]
@@ -21,12 +18,6 @@ impl_conversions!(
     chrono::Duration => Value::Duration,
     chrono::DateTime<chrono::FixedOffset> => Value::Timestamp,
 );
-
-impl From<i32> for Value {
-    fn from(value: i32) -> Self {
-        Value::Int(value as i64)
-    }
-}
 
 /// Describes any type that can be converted from a [`Value`] into itself.
 /// This is commonly used to convert from [`Value`] into primitive types,
@@ -51,12 +42,6 @@ impl FromValue for Value {
 /// be registered to the CEL context must return a value that implements this trait.
 pub trait IntoResolveResult {
     fn into_resolve_result(self) -> ResolveResult;
-}
-
-impl IntoResolveResult for String {
-    fn into_resolve_result(self) -> ResolveResult {
-        Ok(Value::String(Arc::new(self)))
-    }
 }
 
 impl IntoResolveResult for Result<Value, ExecutionError> {
@@ -86,7 +71,7 @@ pub(crate) trait FromContext<'a, 'context> {
 /// # Using `This`
 /// ```
 /// # use std::sync::Arc;
-/// # use cel_interpreter::{Program, Context};
+/// # use cel_interpreter::{Program, Context, Value};
 /// use cel_interpreter::extractors::This;
 /// # let mut context = Context::default();
 /// # context.add_function("startsWith", starts_with);
@@ -102,8 +87,10 @@ pub(crate) trait FromContext<'a, 'context> {
 /// # let value = program2.execute(&context).unwrap();
 /// # assert_eq!(value, true.into());
 ///
-/// fn starts_with(This(this): This<Arc<String>>, prefix: Arc<String>) -> bool {
-///     this.starts_with(prefix.as_str())
+/// fn starts_with(This(this): This<Value>, prefix: Value) -> bool {
+///     let seek: String = this.into();
+///    let sought: String = prefix.into();
+///    seek.starts_with(&sought)
 /// }
 /// ```
 ///
@@ -175,7 +162,7 @@ where
 /// ) -> Result<Value>;
 /// ```
 #[derive(Clone)]
-pub struct Identifier(pub Arc<String>);
+pub struct Identifier(pub String);
 
 impl<'a, 'context> FromContext<'a, 'context> for Identifier {
     fn from_context(ctx: &'a mut FunctionContext<'context>) -> Result<Self, ExecutionError>
@@ -200,7 +187,7 @@ impl From<&Identifier> for String {
 
 impl From<Identifier> for String {
     fn from(value: Identifier) -> Self {
-        value.0.as_ref().clone()
+        value.0.clone()
     }
 }
 
@@ -219,16 +206,11 @@ impl From<Identifier> for String {
 /// # use cel_interpreter::{Value};
 /// use cel_interpreter::extractors::Arguments;
 /// pub fn sum(Arguments(args): Arguments) -> Value {
-///     args.iter().fold(0.0, |acc, val| match val {
-///         Value::Int(x) => *x as f64 + acc,
-///         Value::UInt(x) => *x as f64 + acc,
-///         Value::Float(x) => *x + acc,
-///         _ => acc,
-///     }).into()
+///     args.iter().fold(Value::Number(0.into()), |acc, val| val.clone() + acc).into()
 /// }
 /// ```
 #[derive(Clone)]
-pub struct Arguments(pub Arc<Vec<Value>>);
+pub struct Arguments(pub Vec<Value>);
 
 impl<'a, 'context> FromContext<'a, 'context> for Arguments {
     fn from_context(ctx: &'a mut FunctionContext) -> Result<Self, ExecutionError>

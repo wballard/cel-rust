@@ -1,13 +1,23 @@
 use crate::context::Context;
 use crate::functions::FunctionContext;
 use crate::ExecutionError;
+use base64;
 use cel_parser::ast::*;
+use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
+use rust_decimal::Decimal;
+use rust_decimal_macros::dec;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::convert::{Infallible, TryFrom, TryInto};
+use std::convert::{Infallible, TryInto};
 use std::fmt::{Display, Formatter};
 use std::ops;
 use std::sync::Arc;
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct List {
+    pub list: Arc<Vec<Value>>,
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Map {
@@ -21,45 +31,29 @@ impl PartialOrd for Map {
 }
 
 impl Map {
-    /// Returns a reference to the value corresponding to the key. Implicitly converts between int
-    /// and uint keys.
+    /// Returns a reference to the value corresponding to the key.
     pub fn get(&self, key: &Key) -> Option<&Value> {
-        self.map.get(key).or_else(|| {
-            // Also check keys that are cross type comparable.
-            let converted = match key {
-                Key::Int(k) => Key::Uint(u64::try_from(*k).ok()?),
-                Key::Uint(k) => Key::Int(i64::try_from(*k).ok()?),
-                _ => return None,
-            };
-            self.map.get(&converted)
-        })
+        self.map.get(key)
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Ord, Clone, PartialOrd)]
+#[derive(Debug, Eq, PartialEq, Hash, Ord, Clone, PartialOrd, Serialize, Deserialize)]
 pub enum Key {
-    Int(i64),
-    Uint(u64),
+    Number(Decimal),
     Bool(bool),
-    String(Arc<String>),
+    String(String),
 }
 
 /// Implement conversions from primitive types to [`Key`]
 impl From<String> for Key {
     fn from(v: String) -> Self {
-        Key::String(v.into())
-    }
-}
-
-impl From<Arc<String>> for Key {
-    fn from(v: Arc<String>) -> Self {
         Key::String(v.clone())
     }
 }
 
 impl<'a> From<&'a str> for Key {
     fn from(v: &'a str) -> Self {
-        Key::String(Arc::new(v.into()))
+        Key::String(v.into())
     }
 }
 
@@ -69,52 +63,35 @@ impl From<bool> for Key {
     }
 }
 
-impl From<i64> for Key {
-    fn from(v: i64) -> Self {
-        Key::Int(v)
+impl From<Decimal> for Key {
+    fn from(v: Decimal) -> Self {
+        Key::Number(v)
     }
 }
 
 impl From<u64> for Key {
     fn from(v: u64) -> Self {
-        Key::Uint(v)
-    }
-}
-
-impl serde::Serialize for Key {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            Key::Int(v) => v.serialize(serializer),
-            Key::Uint(v) => v.serialize(serializer),
-            Key::Bool(v) => v.serialize(serializer),
-            Key::String(v) => v.serialize(serializer),
-        }
+        Key::Number(v.into())
     }
 }
 
 impl Display for Key {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Key::Int(v) => write!(f, "{}", v),
-            Key::Uint(v) => write!(f, "{}", v),
+            Key::Number(v) => write!(f, "{}", v),
             Key::Bool(v) => write!(f, "{}", v),
             Key::String(v) => write!(f, "{}", v),
         }
     }
 }
 
-/// Implement conversions from [`Key`] into [`Value`]
 impl TryInto<Key> for Value {
     type Error = Value;
 
     #[inline(always)]
     fn try_into(self) -> Result<Key, Self::Error> {
         match self {
-            Value::Int(v) => Ok(Key::Int(v)),
-            Value::UInt(v) => Ok(Key::Uint(v)),
+            Value::Number(v) => Ok(Key::Number(v)),
             Value::String(v) => Ok(Key::String(v)),
             Value::Bool(v) => Ok(Key::Bool(v)),
             _ => Err(self),
@@ -122,7 +99,6 @@ impl TryInto<Key> for Value {
     }
 }
 
-// Implement conversion from HashMap<K, V> into CelMap
 impl<K: Into<Key>, V: Into<Value>> From<HashMap<K, V>> for Map {
     fn from(map: HashMap<K, V>) -> Self {
         let mut new_map = HashMap::new();
@@ -140,12 +116,6 @@ pub trait TryIntoValue {
     fn try_into_value(self) -> Result<Value, Self::Error>;
 }
 
-impl<T: serde::Serialize> TryIntoValue for T {
-    type Error = crate::ser::SerializationError;
-    fn try_into_value(self) -> Result<Value, Self::Error> {
-        crate::ser::to_value(self)
-    }
-}
 impl TryIntoValue for Value {
     type Error = Infallible;
     fn try_into_value(self) -> Result<Value, Self::Error> {
@@ -153,19 +123,27 @@ impl TryIntoValue for Value {
     }
 }
 
+impl From<Key> for String {
+    fn from(key: Key) -> Self {
+        match key {
+            Key::Number(v) => format!("{}", v),
+            Key::Bool(v) => format!("{}", v),
+            Key::String(v) => v.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Value {
-    List(Arc<Vec<Value>>),
+    List(Vec<Value>),
     Map(Map),
 
-    Function(Arc<String>, Option<Box<Value>>),
+    Function(String, Option<Box<Value>>),
 
     // Atoms
-    Int(i64),
-    UInt(u64),
-    Float(f64),
-    String(Arc<String>),
-    Bytes(Arc<Vec<u8>>),
+    Number(Decimal),
+    String(String),
+    Bytes(Vec<u8>),
     Bool(bool),
     #[cfg(feature = "chrono")]
     Duration(chrono::Duration),
@@ -180,9 +158,7 @@ pub enum ValueType {
     List,
     Map,
     Function,
-    Int,
-    UInt,
-    Float,
+    Number,
     String,
     Bytes,
     Bool,
@@ -198,9 +174,7 @@ impl Display for ValueType {
             ValueType::List => write!(f, "list"),
             ValueType::Map => write!(f, "map"),
             ValueType::Function => write!(f, "function"),
-            ValueType::Int => write!(f, "int"),
-            ValueType::UInt => write!(f, "uint"),
-            ValueType::Float => write!(f, "float"),
+            ValueType::Number => write!(f, "number"),
             ValueType::String => write!(f, "string"),
             ValueType::Bytes => write!(f, "bytes"),
             ValueType::Bool => write!(f, "bool"),
@@ -218,9 +192,7 @@ impl Value {
             Value::List(_) => ValueType::List,
             Value::Map(_) => ValueType::Map,
             Value::Function(_, _) => ValueType::Function,
-            Value::Int(_) => ValueType::Int,
-            Value::UInt(_) => ValueType::UInt,
-            Value::Float(_) => ValueType::Float,
+            Value::Number(_) => ValueType::Number,
             Value::String(_) => ValueType::String,
             Value::Bytes(_) => ValueType::Bytes,
             Value::Bool(_) => ValueType::Bool,
@@ -247,15 +219,61 @@ impl From<&Value> for Value {
     }
 }
 
+impl From<i64> for Value {
+    fn from(value: i64) -> Self {
+        Value::Number(value.into())
+    }
+}
+
+impl From<u64> for Value {
+    fn from(value: u64) -> Self {
+        Value::Number(value.into())
+    }
+}
+
+impl From<i32> for Value {
+    fn from(value: i32) -> Self {
+        Value::Number(value.into())
+    }
+}
+
+impl From<u32> for Value {
+    fn from(value: u32) -> Self {
+        Value::Number(value.into())
+    }
+}
+
+impl From<f32> for Value {
+    fn from(value: f32) -> Self {
+        Value::Number(Decimal::from_f32(value).unwrap())
+    }
+}
+
+impl From<f64> for Value {
+    fn from(value: f64) -> Self {
+        Value::Number(Decimal::from_f64(value).unwrap())
+    }
+}
+
+impl From<bool> for Value {
+    fn from(value: bool) -> Self {
+        Value::Bool(value)
+    }
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Self {
+        Value::String(value)
+    }
+}
+
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Value::Map(a), Value::Map(b)) => a == b,
             (Value::List(a), Value::List(b)) => a == b,
             (Value::Function(a1, a2), Value::Function(b1, b2)) => a1 == b1 && a2 == b2,
-            (Value::Int(a), Value::Int(b)) => a == b,
-            (Value::UInt(a), Value::UInt(b)) => a == b,
-            (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::Number(a), Value::Number(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
             (Value::Bytes(a), Value::Bytes(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
@@ -264,21 +282,6 @@ impl PartialEq for Value {
             (Value::Duration(a), Value::Duration(b)) => a == b,
             #[cfg(feature = "chrono")]
             (Value::Timestamp(a), Value::Timestamp(b)) => a == b,
-            // Allow different numeric types to be compared without explicit casting.
-            (Value::Int(a), Value::UInt(b)) => a
-                .to_owned()
-                .try_into()
-                .map(|a: u64| a == *b)
-                .unwrap_or(false),
-            (Value::Int(a), Value::Float(b)) => (*a as f64) == *b,
-            (Value::UInt(a), Value::Int(b)) => a
-                .to_owned()
-                .try_into()
-                .map(|a: i64| a == *b)
-                .unwrap_or(false),
-            (Value::UInt(a), Value::Float(b)) => (*a as f64) == *b,
-            (Value::Float(a), Value::Int(b)) => *a == (*b as f64),
-            (Value::Float(a), Value::UInt(b)) => *a == (*b as f64),
             (Value::Ulid(a), Value::Ulid(b)) => a == b,
             (_, _) => false,
         }
@@ -290,9 +293,7 @@ impl Eq for Value {}
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
-            (Value::Int(a), Value::Int(b)) => Some(a.cmp(b)),
-            (Value::UInt(a), Value::UInt(b)) => Some(a.cmp(b)),
-            (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
+            (Value::Number(a), Value::Number(b)) => a.partial_cmp(b),
             (Value::String(a), Value::String(b)) => Some(a.cmp(b)),
             (Value::Bool(a), Value::Bool(b)) => Some(a.cmp(b)),
             (Value::Null, Value::Null) => Some(Ordering::Equal),
@@ -300,25 +301,6 @@ impl PartialOrd for Value {
             (Value::Duration(a), Value::Duration(b)) => Some(a.cmp(b)),
             #[cfg(feature = "chrono")]
             (Value::Timestamp(a), Value::Timestamp(b)) => Some(a.cmp(b)),
-            // Allow different numeric types to be compared without explicit casting.
-            (Value::Int(a), Value::UInt(b)) => Some(
-                a.to_owned()
-                    .try_into()
-                    .map(|a: u64| a.cmp(b))
-                    // If the i64 doesn't fit into a u64 it must be less than 0.
-                    .unwrap_or(Ordering::Less),
-            ),
-            (Value::Int(a), Value::Float(b)) => (*a as f64).partial_cmp(b),
-            (Value::UInt(a), Value::Int(b)) => Some(
-                a.to_owned()
-                    .try_into()
-                    .map(|a: i64| a.cmp(b))
-                    // If the u64 doesn't fit into a i64 it must be greater than i64::MAX.
-                    .unwrap_or(Ordering::Greater),
-            ),
-            (Value::UInt(a), Value::Float(b)) => (*a as f64).partial_cmp(b),
-            (Value::Float(a), Value::Int(b)) => a.partial_cmp(&(*b as f64)),
-            (Value::Float(a), Value::UInt(b)) => a.partial_cmp(&(*b as f64)),
             (Value::Ulid(a), Value::Ulid(b)) => a.partial_cmp(b),
             _ => None,
         }
@@ -328,8 +310,7 @@ impl PartialOrd for Value {
 impl From<&Key> for Value {
     fn from(value: &Key) -> Self {
         match value {
-            Key::Int(v) => Value::Int(*v),
-            Key::Uint(v) => Value::UInt(*v),
+            Key::Number(v) => Value::Number(*v),
             Key::Bool(v) => Value::Bool(*v),
             Key::String(v) => Value::String(v.clone()),
         }
@@ -339,8 +320,7 @@ impl From<&Key> for Value {
 impl From<Key> for Value {
     fn from(value: Key) -> Self {
         match value {
-            Key::Int(v) => Value::Int(v),
-            Key::Uint(v) => Value::UInt(v),
+            Key::Number(v) => Value::Number(v),
             Key::Bool(v) => Value::Bool(v),
             Key::String(v) => Value::String(v),
         }
@@ -353,24 +333,9 @@ impl From<&Key> for Key {
     }
 }
 
-// Convert Vec<T> to Value
 impl<T: Into<Value>> From<Vec<T>> for Value {
     fn from(v: Vec<T>) -> Self {
         Value::List(v.into_iter().map(|v| v.into()).collect::<Vec<_>>().into())
-    }
-}
-
-// Convert Vec<u8> to Value
-impl From<Vec<u8>> for Value {
-    fn from(v: Vec<u8>) -> Self {
-        Value::Bytes(v.into())
-    }
-}
-
-// Convert String to Value
-impl From<String> for Value {
-    fn from(v: String) -> Self {
-        Value::String(v.into())
     }
 }
 
@@ -380,7 +345,6 @@ impl From<&str> for Value {
     }
 }
 
-// Convert Option<T> to Value
 impl<T: Into<Value>> From<Option<T>> for Value {
     fn from(v: Option<T>) -> Self {
         match v {
@@ -390,7 +354,6 @@ impl<T: Into<Value>> From<Option<T>> for Value {
     }
 }
 
-// Convert HashMap<K, V> to Value
 impl<K: Into<Key>, V: Into<Value>> From<HashMap<K, V>> for Value {
     fn from(v: HashMap<K, V>) -> Self {
         Value::Map(v.into())
@@ -400,6 +363,60 @@ impl<K: Into<Key>, V: Into<Value>> From<HashMap<K, V>> for Value {
 impl From<ulid::Ulid> for Value {
     fn from(ulid: ulid::Ulid) -> Self {
         Value::Ulid(ulid)
+    }
+}
+use base64::{
+    alphabet,
+    engine::{self, general_purpose},
+    Engine as _,
+};
+
+const CUSTOM_ENGINE: engine::GeneralPurpose =
+    engine::GeneralPurpose::new(&alphabet::URL_SAFE, general_purpose::NO_PAD);
+
+impl From<Value> for String {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::String(v) => v.clone(),
+            Value::Bool(v) => format!("{}", v),
+            Value::Number(v) => format!("{}", v),
+            Value::Null => "".to_string(),
+            Value::Duration(v) => v.to_string(),
+            Value::Timestamp(v) => v.to_rfc3339(),
+            Value::Ulid(v) => v.to_string(),
+            Value::Bytes(v) => {
+                let mut buf = String::new();
+                CUSTOM_ENGINE.encode_string(v, &mut buf);
+                buf
+            }
+            Value::List(v) => {
+                let mut buf = String::new();
+                buf.push('[');
+                for (i, v) in v.iter().enumerate() {
+                    if i > 0 {
+                        buf.push_str(", ");
+                    }
+                    buf.push_str(&String::from(v.clone()));
+                }
+                buf.push(']');
+                buf
+            }
+            Value::Map(v) => {
+                let mut buf = String::new();
+                buf.push('{');
+                for (i, (k, v)) in v.map.iter().enumerate() {
+                    if i > 0 {
+                        buf.push_str(", ");
+                    }
+                    buf.push_str(&String::from(k.clone()));
+                    buf.push_str(": ");
+                    buf.push_str(&String::from(v.clone()));
+                }
+                buf.push('}');
+                buf
+            }
+            _ => "".to_string(),
+        }
     }
 }
 
@@ -435,7 +452,7 @@ impl<'a> Value {
                 let right = Value::resolve(right, ctx)?;
 
                 match op {
-                    ArithmeticOp::Add => left + right,
+                    ArithmeticOp::Add => Ok(left + right),
                     ArithmeticOp::Subtract => left - right,
                     ArithmeticOp::Divide => left / right,
                     ArithmeticOp::Multiply => left * right,
@@ -507,14 +524,11 @@ impl<'a> Value {
                     UnaryOp::Not => Ok(Value::Bool(!expr.to_bool())),
                     UnaryOp::DoubleNot => Ok(Value::Bool(expr.to_bool())),
                     UnaryOp::Minus => match expr {
-                        Value::Int(i) => Ok(Value::Int(-i)),
-                        Value::Float(i) => Ok(Value::Float(-i)),
+                        Value::Number(i) => Ok(Value::Number(-i)),
                         value => Err(ExecutionError::UnsupportedUnaryOperator("minus", value)),
                     },
                     UnaryOp::DoubleMinus => match expr {
-                        Value::Int(_) => Ok(expr),
-                        Value::UInt(_) => Ok(expr),
-                        Value::Float(_) => Ok(expr),
+                        Value::Number(_) => Ok(expr),
                         value => Err(ExecutionError::UnsupportedUnaryOperator("negate", value)),
                     },
                 }
@@ -543,12 +557,12 @@ impl<'a> Value {
                     map: Arc::from(map),
                 }))
             }
-            Expression::Ident(name) => ctx.get_variable(&***name),
+            Expression::Ident(name) => ctx.get_variable(name),
             Expression::FunctionCall(name, target, args) => {
                 if let Expression::Ident(name) = &**name {
                     let func = ctx
                         .get_function(&**name)
-                        .ok_or_else(|| ExecutionError::UndeclaredReference(Arc::clone(name)))?;
+                        .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone()))?;
                     match target {
                         None => {
                             let mut ctx =
@@ -587,13 +601,15 @@ impl<'a> Value {
             Member::Index(idx) => {
                 let idx = Value::resolve(idx, ctx)?;
                 match (self, idx) {
-                    (Value::List(items), Value::Int(idx)) => items
-                        .get(idx as usize)
+                    (Value::List(items), Value::Number(idx)) => items
+                        .get(idx.to_usize().unwrap())
                         .cloned()
                         .unwrap_or(Value::Null)
                         .into(),
-                    (Value::String(str), Value::Int(idx)) => {
-                        match str.get(idx as usize..(idx + 1) as usize) {
+                    (Value::String(str), Value::Number(idx)) => {
+                        let from = idx.to_usize().unwrap_or(0);
+                        let to = (idx + dec!(1)).to_usize().unwrap_or(0);
+                        match str.get(from..to) {
                             None => Ok(Value::Null),
                             Some(str) => Ok(Value::String(str.to_string().into())),
                         }
@@ -608,12 +624,7 @@ impl<'a> Value {
                         .cloned()
                         .unwrap_or(Value::Null)
                         .into(),
-                    (Value::Map(map), Value::Int(property)) => map
-                        .get(&property.into())
-                        .cloned()
-                        .unwrap_or(Value::Null)
-                        .into(),
-                    (Value::Map(map), Value::UInt(property)) => map
+                    (Value::Map(map), Value::Number(property)) => map
                         .get(&property.into())
                         .cloned()
                         .unwrap_or(Value::Null)
@@ -637,7 +648,7 @@ impl<'a> Value {
                 // If the property is both an attribute and a method, then we
                 // give priority to the property. Maybe we can implement lookahead
                 // to see if the next token is a function call?
-                match (child, ctx.has_function(&***name)) {
+                match (child, ctx.has_function(name)) {
                     (None, false) => ExecutionError::NoSuchKey(name.clone()).into(),
                     (Some(child), _) => child.into(),
                     (None, true) => Value::Function(name.clone(), Some(self.into())).into(),
@@ -651,9 +662,7 @@ impl<'a> Value {
         match self {
             Value::List(v) => !v.is_empty(),
             Value::Map(v) => !v.map.is_empty(),
-            Value::Int(v) => *v != 0,
-            Value::UInt(v) => *v != 0,
-            Value::Float(v) => *v != 0.0,
+            Value::Number(v) => *v != dec!(0),
             Value::String(v) => !v.is_empty(),
             Value::Bytes(v) => !v.is_empty(),
             Value::Bool(v) => *v,
@@ -672,9 +681,7 @@ impl From<&Atom> for Value {
     #[inline(always)]
     fn from(atom: &Atom) -> Self {
         match atom {
-            Atom::Int(v) => Value::Int(*v),
-            Atom::UInt(v) => Value::UInt(*v),
-            Atom::Float(v) => Value::Float(*v),
+            Atom::Number(v) => Value::Number(*v),
             Atom::String(v) => Value::String(v.clone()),
             Atom::Bytes(v) => Value::Bytes(v.clone()),
             Atom::Bool(v) => Value::Bool(*v),
@@ -685,20 +692,13 @@ impl From<&Atom> for Value {
 }
 
 impl ops::Add<Value> for Value {
-    type Output = ResolveResult;
+    type Output = Value;
 
     #[inline(always)]
     fn add(self, rhs: Value) -> Self::Output {
         match (self, rhs) {
-            (Value::Int(l), Value::Int(r)) => Value::Int(l + r).into(),
-            (Value::UInt(l), Value::UInt(r)) => Value::UInt(l + r).into(),
-
-            // Float matrix
-            (Value::Float(l), Value::Float(r)) => Value::Float(l + r).into(),
-            (Value::Int(l), Value::Float(r)) => Value::Float(l as f64 + r).into(),
-            (Value::Float(l), Value::Int(r)) => Value::Float(l + r as f64).into(),
-            (Value::UInt(l), Value::Float(r)) => Value::Float(l as f64 + r).into(),
-            (Value::Float(l), Value::UInt(r)) => Value::Float(l + r as f64).into(),
+            (Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r).into(),
+            (Value::Number(l), Value::Number(r)) => Value::Number(l + r).into(),
 
             (Value::List(l), Value::List(r)) => {
                 Value::List(l.iter().chain(r.iter()).cloned().collect::<Vec<_>>().into()).into()
@@ -709,6 +709,12 @@ impl ops::Add<Value> for Value {
                 new.push_str(&r);
                 Value::String(new.into()).into()
             }
+            (Value::Bytes(l), Value::Bytes(r)) => {
+                let mut new = Vec::with_capacity(l.len() + r.len());
+                new.extend_from_slice(&l);
+                new.extend_from_slice(&r);
+                Value::Bytes(new).into()
+            }
             // Merge two maps should overwrite keys in the left map with the right map
             (Value::Map(l), Value::Map(r)) => {
                 let mut new = HashMap::default();
@@ -718,17 +724,17 @@ impl ops::Add<Value> for Value {
                 for (k, v) in r.map.iter() {
                     new.insert(k.clone(), v.clone());
                 }
-                Value::Map(Map { map: Arc::new(new) }).into()
+                Value::Map(Map { map: Arc::new(new) })
             }
+            (Value::Null, Value::Null) => Value::Null,
             #[cfg(feature = "chrono")]
-            (Value::Duration(l), Value::Duration(r)) => Value::Duration(l + r).into(),
+            (Value::Duration(l), Value::Duration(r)) => Value::Duration(l + r),
             #[cfg(feature = "chrono")]
-            (Value::Timestamp(l), Value::Duration(r)) => Value::Timestamp(l + r).into(),
+            (Value::Timestamp(l), Value::Duration(r)) => Value::Timestamp(l + r),
             #[cfg(feature = "chrono")]
-            (Value::Duration(l), Value::Timestamp(r)) => Value::Timestamp(r + l).into(),
-            (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                "add", left, right,
-            )),
+            (Value::Duration(l), Value::Timestamp(r)) => Value::Timestamp(r + l),
+            // make a list from the two values
+            (left, right) => Value::List(vec![left, right]),
         }
     }
 }
@@ -739,15 +745,8 @@ impl ops::Sub<Value> for Value {
     #[inline(always)]
     fn sub(self, rhs: Value) -> Self::Output {
         match (self, rhs) {
-            (Value::Int(l), Value::Int(r)) => Value::Int(l - r).into(),
-            (Value::UInt(l), Value::UInt(r)) => Value::UInt(l - r).into(),
+            (Value::Number(l), Value::Number(r)) => Value::Number(l - r).into(),
 
-            // Float matrix
-            (Value::Float(l), Value::Float(r)) => Value::Float(l - r).into(),
-            (Value::Int(l), Value::Float(r)) => Value::Float(l as f64 - r).into(),
-            (Value::Float(l), Value::Int(r)) => Value::Float(l - r as f64).into(),
-            (Value::UInt(l), Value::Float(r)) => Value::Float(l as f64 - r).into(),
-            (Value::Float(l), Value::UInt(r)) => Value::Float(l - r as f64).into(),
             // todo: implement checked sub for these over-flowable operations
             #[cfg(feature = "chrono")]
             (Value::Duration(l), Value::Duration(r)) => Value::Duration(l - r).into(),
@@ -768,15 +767,7 @@ impl ops::Div<Value> for Value {
     #[inline(always)]
     fn div(self, rhs: Value) -> Self::Output {
         match (self, rhs) {
-            (Value::Int(l), Value::Int(r)) => Value::Int(l / r).into(),
-            (Value::UInt(l), Value::UInt(r)) => Value::UInt(l / r).into(),
-
-            // Float matrix
-            (Value::Float(l), Value::Float(r)) => Value::Float(l / r).into(),
-            (Value::Int(l), Value::Float(r)) => Value::Float(l as f64 / r).into(),
-            (Value::Float(l), Value::Int(r)) => Value::Float(l / r as f64).into(),
-            (Value::UInt(l), Value::Float(r)) => Value::Float(l as f64 / r).into(),
-            (Value::Float(l), Value::UInt(r)) => Value::Float(l / r as f64).into(),
+            (Value::Number(l), Value::Number(r)) => Value::Number(l / r).into(),
 
             (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
                 "div", left, right,
@@ -791,15 +782,7 @@ impl ops::Mul<Value> for Value {
     #[inline(always)]
     fn mul(self, rhs: Value) -> Self::Output {
         match (self, rhs) {
-            (Value::Int(l), Value::Int(r)) => Value::Int(l * r).into(),
-            (Value::UInt(l), Value::UInt(r)) => Value::UInt(l * r).into(),
-
-            // Float matrix
-            (Value::Float(l), Value::Float(r)) => Value::Float(l * r).into(),
-            (Value::Int(l), Value::Float(r)) => Value::Float(l as f64 * r).into(),
-            (Value::Float(l), Value::Int(r)) => Value::Float(l * r as f64).into(),
-            (Value::UInt(l), Value::Float(r)) => Value::Float(l as f64 * r).into(),
-            (Value::Float(l), Value::UInt(r)) => Value::Float(l * r as f64).into(),
+            (Value::Number(l), Value::Number(r)) => Value::Number(l * r).into(),
 
             (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
                 "mul", left, right,
@@ -814,16 +797,7 @@ impl ops::Rem<Value> for Value {
     #[inline(always)]
     fn rem(self, rhs: Value) -> Self::Output {
         match (self, rhs) {
-            (Value::Int(l), Value::Int(r)) => Value::Int(l % r).into(),
-            (Value::UInt(l), Value::UInt(r)) => Value::UInt(l % r).into(),
-
-            // Float matrix
-            (Value::Float(l), Value::Float(r)) => Value::Float(l % r).into(),
-            (Value::Int(l), Value::Float(r)) => Value::Float(l as f64 % r).into(),
-            (Value::Float(l), Value::Int(r)) => Value::Float(l % r as f64).into(),
-            (Value::UInt(l), Value::Float(r)) => Value::Float(l as f64 % r).into(),
-            (Value::Float(l), Value::UInt(r)) => Value::Float(l % r as f64).into(),
-
+            (Value::Number(l), Value::Number(r)) => Value::Number(l % r).into(),
             (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
                 "rem", left, right,
             )),
@@ -835,7 +809,6 @@ impl ops::Rem<Value> for Value {
 mod tests {
     use crate::{objects::Key, Context, ExecutionError, Program, Value};
     use std::collections::HashMap;
-    use std::sync::Arc;
 
     #[test]
     fn test_indexed_map_access() {
@@ -852,8 +825,8 @@ mod tests {
     #[test]
     fn test_numeric_map_access() {
         let mut context = Context::default();
-        let mut numbers = HashMap::new();
-        numbers.insert(Key::Uint(1), "one".to_string());
+        let mut numbers: HashMap<Key, String> = HashMap::new();
+        numbers.insert(1.into(), "one".to_string());
         context.add_variable_from_value("numbers", numbers);
 
         let program = Program::compile("numbers[1]").unwrap();
@@ -865,7 +838,7 @@ mod tests {
     fn test_heterogeneous_compare() {
         let context = Context::default();
 
-        let program = Program::compile("1 < uint(2)").unwrap();
+        let program = Program::compile("1.0 < 2").unwrap();
         let value = program.execute(&context).unwrap();
         assert_eq!(value, true.into());
 
@@ -873,7 +846,7 @@ mod tests {
         let value = program.execute(&context).unwrap();
         assert_eq!(value, true.into());
 
-        let program = Program::compile("uint(0) > -10").unwrap();
+        let program = Program::compile("0 > -10").unwrap();
         let value = program.execute(&context).unwrap();
         assert_eq!(
             value,
@@ -889,17 +862,6 @@ mod tests {
         let program = Program::compile("1.0 > 0.0").unwrap();
         let value = program.execute(&context).unwrap();
         assert_eq!(value, true.into());
-
-        let program = Program::compile("double('NaN') == double('NaN')").unwrap();
-        let value = program.execute(&context).unwrap();
-        assert_eq!(value, false.into(), "NaN should not equal itself");
-
-        let program = Program::compile("1.0 > double('NaN')").unwrap();
-        let result = program.execute(&context);
-        assert!(
-            result.is_err(),
-            "NaN should not be comparable with inequality operators"
-        );
     }
 
     #[test]
@@ -915,11 +877,13 @@ mod tests {
     fn test_size_fn_var() {
         let program = Program::compile("size(requests) + size == 5").unwrap();
         let mut context = Context::default();
-        let requests = vec![Value::Int(42), Value::Int(42)];
+        let requests = vec![Value::Number(42.into()), Value::Number(42.into())];
         context
-            .add_variable("requests", Value::List(Arc::new(requests)))
+            .add_variable("requests", Value::List(requests))
             .unwrap();
-        context.add_variable("size", Value::Int(3)).unwrap();
+        context
+            .add_variable("size", Value::Number(3.into()))
+            .unwrap();
         assert_eq!(program.execute(&context).unwrap(), Value::Bool(true));
     }
 
@@ -933,15 +897,11 @@ mod tests {
     fn test_invalid_sub() {
         test_execution_error(
             "'foo' - 10",
-            ExecutionError::UnsupportedBinaryOperator("sub", "foo".into(), Value::Int(10)),
-        );
-    }
-
-    #[test]
-    fn test_invalid_add() {
-        test_execution_error(
-            "'foo' + 10",
-            ExecutionError::UnsupportedBinaryOperator("add", "foo".into(), Value::Int(10)),
+            ExecutionError::UnsupportedBinaryOperator(
+                "sub",
+                "foo".into(),
+                Value::Number(10.into()),
+            ),
         );
     }
 
@@ -949,7 +909,11 @@ mod tests {
     fn test_invalid_div() {
         test_execution_error(
             "'foo' / 10",
-            ExecutionError::UnsupportedBinaryOperator("div", "foo".into(), Value::Int(10)),
+            ExecutionError::UnsupportedBinaryOperator(
+                "div",
+                "foo".into(),
+                Value::Number(10.into()),
+            ),
         );
     }
 
@@ -957,7 +921,11 @@ mod tests {
     fn test_invalid_rem() {
         test_execution_error(
             "'foo' % 10",
-            ExecutionError::UnsupportedBinaryOperator("rem", "foo".into(), Value::Int(10)),
+            ExecutionError::UnsupportedBinaryOperator(
+                "rem",
+                "foo".into(),
+                Value::Number(10.into()),
+            ),
         );
     }
 
@@ -965,9 +933,7 @@ mod tests {
     fn out_of_bound_list_access() {
         let program = Program::compile("list[10]").unwrap();
         let mut context = Context::default();
-        context
-            .add_variable("list", Value::List(Arc::new(vec![])))
-            .unwrap();
+        context.add_variable("list", Value::List(vec![])).unwrap();
         let result = program.execute(&context);
         assert_eq!(result.unwrap(), Value::Null);
     }
@@ -976,15 +942,13 @@ mod tests {
     fn reference_to_value() {
         let test = "example".to_string();
         let direct: Value = test.as_str().into();
-        assert_eq!(direct, Value::String(Arc::new(String::from("example"))));
+        assert_eq!(direct, Value::String("example".to_string()));
 
         let vec = vec![test.as_str()];
         let indirect: Value = vec.into();
         assert_eq!(
             indirect,
-            Value::List(Arc::new(vec![Value::String(Arc::new(String::from(
-                "example"
-            )))]))
+            Value::List(vec![Value::String("example".to_string())])
         );
     }
 

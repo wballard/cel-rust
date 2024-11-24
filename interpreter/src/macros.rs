@@ -29,12 +29,6 @@ macro_rules! impl_conversions {
                 }
             }
 
-            impl From<$target_type> for Value {
-                fn from(value: $target_type) -> Self {
-                    $value_variant(value)
-                }
-            }
-
             impl $crate::magic::IntoResolveResult for $target_type {
                 fn into_resolve_result(self) -> ResolveResult {
                     Ok($value_variant(self))

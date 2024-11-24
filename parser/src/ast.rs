@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::sync::Arc;
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum RelationOp {
@@ -46,23 +45,21 @@ pub enum Expression {
     Map(Vec<(Expression, Expression)>),
 
     Atom(Atom),
-    Ident(Arc<String>),
+    Ident(String),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Member {
-    Attribute(Arc<String>),
+    Attribute(String),
     Index(Box<Expression>),
-    Fields(Vec<(Arc<String>, Expression)>),
+    Fields(Vec<(String, Expression)>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Atom {
-    Int(i64),
-    UInt(u64),
-    Float(f64),
-    String(Arc<String>),
-    Bytes(Arc<Vec<u8>>),
+    Number(rust_decimal::Decimal),
+    String(String),
+    Bytes(Vec<u8>),
     Bool(bool),
     Null,
     Ulid(ulid::Ulid),
@@ -71,6 +68,12 @@ pub enum Atom {
 impl From<ulid::Ulid> for Atom {
     fn from(ulid: ulid::Ulid) -> Self {
         Atom::Ulid(ulid)
+    }
+}
+
+impl From<rust_decimal::Decimal> for Atom {
+    fn from(decimal: rust_decimal::Decimal) -> Self {
+        Atom::Number(decimal)
     }
 }
 
