@@ -206,7 +206,7 @@ impl From<Identifier> for String {
 /// # use cel_interpreter::{Value};
 /// use cel_interpreter::extractors::Arguments;
 /// pub fn sum(Arguments(args): Arguments) -> Value {
-///     args.iter().fold(Value::Number(0.into()), |acc, val| val.clone() + acc).into()
+///     args.iter().fold(Value::Number(0.into()), |acc, val| (val + acc.clone()).unwrap_or(acc)).into()
 /// }
 /// ```
 #[derive(Clone)]

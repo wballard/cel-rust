@@ -452,7 +452,7 @@ impl<'a> Value {
                 let right = Value::resolve(right, ctx)?;
 
                 match op {
-                    ArithmeticOp::Add => Ok(left + right),
+                    ArithmeticOp::Add => left + right,
                     ArithmeticOp::Subtract => left - right,
                     ArithmeticOp::Divide => left / right,
                     ArithmeticOp::Multiply => left * right,
@@ -611,7 +611,7 @@ impl<'a> Value {
                         let to = (idx + dec!(1)).to_usize().unwrap_or(0);
                         match str.get(from..to) {
                             None => Ok(Value::Null),
-                            Some(str) => Ok(Value::String(str.to_string().into())),
+                            Some(str) => Ok(Value::String(str.to_string())),
                         }
                     }
                     (Value::Map(map), Value::String(property)) => map
@@ -692,22 +692,27 @@ impl From<&Atom> for Value {
 }
 
 impl ops::Add<Value> for Value {
-    type Output = Value;
+    type Output = ResolveResult;
 
     #[inline(always)]
     fn add(self, rhs: Value) -> Self::Output {
         match (self, rhs) {
             (Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r).into(),
             (Value::Number(l), Value::Number(r)) => Value::Number(l + r).into(),
-
             (Value::List(l), Value::List(r)) => {
-                Value::List(l.iter().chain(r.iter()).cloned().collect::<Vec<_>>().into()).into()
+                Value::List(l.iter().chain(r.iter()).cloned().collect::<Vec<_>>()).into()
             }
             (Value::String(l), Value::String(r)) => {
                 let mut new = String::with_capacity(l.len() + r.len());
                 new.push_str(&l);
                 new.push_str(&r);
-                Value::String(new.into()).into()
+                Value::String(new).into()
+            }
+            (Value::String(l), Value::Number(r)) => {
+                let mut new = String::with_capacity(l.len() + 1);
+                new.push_str(&l);
+                new.push_str(&r.to_string());
+                Value::String(new).into()
             }
             (Value::Bytes(l), Value::Bytes(r)) => {
                 let mut new = Vec::with_capacity(l.len() + r.len());
@@ -724,18 +729,38 @@ impl ops::Add<Value> for Value {
                 for (k, v) in r.map.iter() {
                     new.insert(k.clone(), v.clone());
                 }
-                Value::Map(Map { map: Arc::new(new) })
+                Value::Map(Map { map: new.into() }).into()
             }
-            (Value::Null, Value::Null) => Value::Null,
+            (Value::Null, Value::Null) => Value::Null.into(),
             #[cfg(feature = "chrono")]
-            (Value::Duration(l), Value::Duration(r)) => Value::Duration(l + r),
+            (Value::Duration(l), Value::Duration(r)) => Value::Duration(l + r).into(),
             #[cfg(feature = "chrono")]
-            (Value::Timestamp(l), Value::Duration(r)) => Value::Timestamp(l + r),
+            (Value::Timestamp(l), Value::Duration(r)) => Value::Timestamp(l + r).into(),
             #[cfg(feature = "chrono")]
-            (Value::Duration(l), Value::Timestamp(r)) => Value::Timestamp(r + l),
-            // make a list from the two values
-            (left, right) => Value::List(vec![left, right]),
+            (Value::Duration(l), Value::Timestamp(r)) => Value::Timestamp(r + l).into(),
+            (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
+                "add", left, right,
+            )),
         }
+    }
+}
+
+impl ops::Add<Value> for &Value {
+    type Output = ResolveResult;
+
+    #[inline(always)]
+    fn add(self, rhs: Value) -> Self::Output {
+        let lhs = self.clone();
+        lhs.add(rhs)
+    }
+}
+
+impl ops::Add<&Value> for Value {
+    type Output = ResolveResult;
+
+    #[inline(always)]
+    fn add(self, rhs: &Value) -> Self::Output {
+        self.add(rhs.clone())
     }
 }
 
@@ -747,7 +772,6 @@ impl ops::Sub<Value> for Value {
         match (self, rhs) {
             (Value::Number(l), Value::Number(r)) => Value::Number(l - r).into(),
 
-            // todo: implement checked sub for these over-flowable operations
             #[cfg(feature = "chrono")]
             (Value::Duration(l), Value::Duration(r)) => Value::Duration(l - r).into(),
             #[cfg(feature = "chrono")]
@@ -887,6 +911,42 @@ mod tests {
         assert_eq!(program.execute(&context).unwrap(), Value::Bool(true));
     }
 
+    #[test]
+    fn test_add_numbers() {
+        let program = Program::compile("1 + 2").unwrap();
+        let context = Context::default();
+        let result = program.execute(&context);
+        assert_eq!(result.unwrap(), Value::Number(3.into()));
+    }
+
+    #[test]
+    fn test_add_strings() {
+        let program = Program::compile("'foo' + 'bar'").unwrap();
+        let context = Context::default();
+        let result = program.execute(&context);
+        assert_eq!(result.unwrap(), Value::String("foobar".to_string()));
+    }
+
+    #[test]
+    fn test_add_lists() {
+        let program = Program::compile("[1, 2] + [3, 4]").unwrap();
+        let context = Context::default();
+        let result = program.execute(&context);
+        assert_eq!(
+            result.unwrap(),
+            Value::List(vec![1.into(), 2.into(), 3.into(), 4.into()])
+        );
+    }
+
+    #[test]
+    fn test_add_number_to_string() {
+        let program = Program::compile("'foo' + 10").unwrap();
+        let context = Context::default();
+        let result = program.execute(&context);
+        assert_eq!(result.unwrap(), Value::String("foo10".to_string()));
+    }
+
+    /// Helper that will expect an error.
     fn test_execution_error(program: &str, expected: ExecutionError) {
         let program = Program::compile(program).unwrap();
         let result = program.execute(&Context::default());

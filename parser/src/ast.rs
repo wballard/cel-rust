@@ -20,6 +20,7 @@ pub enum ArithmeticOp {
     Modulus,
 }
 
+/// Unary operators act on a single operand to the right.
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum UnaryOp {
     Not,
@@ -32,18 +33,14 @@ pub enum UnaryOp {
 pub enum Expression {
     Arithmetic(Box<Expression>, ArithmeticOp, Box<Expression>),
     Relation(Box<Expression>, RelationOp, Box<Expression>),
-
     Ternary(Box<Expression>, Box<Expression>, Box<Expression>),
     Or(Box<Expression>, Box<Expression>),
     And(Box<Expression>, Box<Expression>),
     Unary(UnaryOp, Box<Expression>),
-
     Member(Box<Expression>, Box<Member>),
     FunctionCall(Box<Expression>, Option<Box<Expression>>, Vec<Expression>),
-
     List(Vec<Expression>),
     Map(Vec<(Expression, Expression)>),
-
     Atom(Atom),
     Ident(String),
 }
