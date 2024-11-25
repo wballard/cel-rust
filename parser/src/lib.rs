@@ -556,7 +556,38 @@ mod tests {
     fn test_date() {
         assert_parse_eq(
             "2021-01-01",
-            Atom(chrono::Utc.with_ymd_and_hms(2021, 1, 1, 0, 0, 0).unwrap().into())
+            Atom(
+                chrono::Utc
+                    .with_ymd_and_hms(2021, 1, 1, 0, 0, 0)
+                    .unwrap()
+                    .into(),
+            ),
+        )
+    }
+
+    #[test]
+    fn test_date_time() {
+        assert_parse_eq(
+            "2021-01-01T14:20:01",
+            Atom(
+                chrono::Utc
+                    .with_ymd_and_hms(2021, 1, 1, 14, 20, 1)
+                    .unwrap()
+                    .into(),
+            ),
+        )
+    }
+
+    #[test]
+    fn test_date_time_zone() {
+        assert_parse_eq(
+            "2021-01-01T14:20:01-08:00",
+            Atom(
+                chrono::Utc
+                    .with_ymd_and_hms(2021, 1, 1, 22, 20, 1)
+                    .unwrap()
+                    .into(),
+            ),
         )
     }
 }

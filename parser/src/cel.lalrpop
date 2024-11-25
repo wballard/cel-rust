@@ -1,4 +1,4 @@
-use crate::{RelationOp, ArithmeticOp, Expression, UnaryOp, Member, Atom, parse_bytes, parse_string, parse_date};
+use crate::{RelationOp, ArithmeticOp, Expression, UnaryOp, Member, Atom, parse_bytes, parse_string, parse_date, parse_date_time, parse_date_time_zone};
 use std::str::FromStr;
 use ulid::Ulid;
 use rust_decimal::Decimal;
@@ -12,7 +12,9 @@ match {
    r"//[^\n\r]*[\n\r]*" => { },
 } else {
     r"[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}" => ULID,
-    r"[0-9]{4}-[0-9]{2}-[0-9]{2}" => DATE
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}" => DATE,
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}" => DATETIME,
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}" => DATETIMEZONE
 } else {
     r"-?[0-9]+" => INT,
    _
@@ -171,7 +173,11 @@ Atom: Atom = {
     ULID => Atom::Ulid(Ulid::from_string(<>).unwrap().into()),
 
     // UTC date
-    DATE => Atom::DateTime(parse_date(<>))
+    DATE => Atom::DateTime(parse_date(<>)),
+    // UTC date time
+    DATETIME => Atom::DateTime(parse_date_time(<>)),
+    // date and time withing zone
+    DATETIMEZONE => Atom::DateTime(parse_date_time_zone(<>))
 };
 
 Ident: String = {
