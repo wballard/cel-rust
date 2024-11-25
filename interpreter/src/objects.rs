@@ -688,6 +688,7 @@ impl From<&Atom> for Value {
             Atom::Null => Value::Null,
             Atom::Ulid(v) => Value::Ulid(*v),
             Atom::DateTime(v) => Value::Timestamp(*v),
+            Atom::Duration(v) => Value::Duration(*v),
         }
     }
 }

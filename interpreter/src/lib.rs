@@ -17,9 +17,6 @@ mod magic;
 pub mod objects;
 mod resolvers;
 
-
-mod duration;
-
 use magic::FromContext;
 
 pub mod extractors {

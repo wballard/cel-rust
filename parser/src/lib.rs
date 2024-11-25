@@ -9,6 +9,9 @@ pub use parse::*;
 pub mod error;
 pub use error::ParseError;
 
+pub mod duration;
+pub use duration::*;
+
 lalrpop_mod!(#[allow(clippy::all)] pub parser, "/cel.rs");
 
 /// Parses a CEL expression and returns it.
@@ -587,6 +590,23 @@ mod tests {
                     .with_ymd_and_hms(2021, 1, 1, 22, 20, 1)
                     .unwrap()
                     .into(),
+            ),
+        )
+    }
+
+    #[test]
+    fn test_duration() {
+        assert_parse_eq("1h", Atom(chrono::Duration::hours(1).into()))
+    }
+
+    #[test]
+    fn test_duration_compound() {
+        assert_parse_eq(
+            "1h1m1s",
+            Atom(
+                (chrono::Duration::hours(1)
+                    + chrono::Duration::minutes(1)
+                    + chrono::Duration::seconds(1)).into(),
             ),
         )
     }

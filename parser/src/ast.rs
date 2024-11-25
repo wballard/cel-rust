@@ -66,6 +66,7 @@ pub enum Atom {
     Null,
     Ulid(ulid::Ulid),
     DateTime(chrono::DateTime<chrono::Utc>),
+    Duration(chrono::Duration),
 }
 
 impl From<ulid::Ulid> for Atom {
@@ -83,6 +84,12 @@ impl From<rust_decimal::Decimal> for Atom {
 impl From<chrono::DateTime<chrono::Utc>> for Atom {
     fn from(datetime: chrono::DateTime<chrono::Utc>) -> Self {
         Atom::DateTime(datetime)
+    }
+}
+
+impl From<chrono::Duration> for Atom {
+    fn from(duration: chrono::Duration) -> Self {
+        Atom::Duration(duration)
     }
 }
 

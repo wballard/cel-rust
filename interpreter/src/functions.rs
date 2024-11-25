@@ -3,7 +3,7 @@ use crate::magic::{Arguments, Identifier, This};
 use crate::objects::{Value, ValueType};
 use crate::resolvers::{Argument, Resolver};
 use crate::ExecutionError;
-use cel_parser::Expression;
+use cel_parser::{format_duration, Expression};
 use std::cmp::Ordering;
 use std::convert::TryInto;
 
@@ -155,7 +155,7 @@ pub fn string(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
 
         Value::Timestamp(t) => Value::String(t.to_rfc3339().into()),
 
-        Value::Duration(v) => Value::String(crate::duration::format_duration(&v).into()),
+        Value::Duration(v) => Value::String(format_duration(&v).into()),
         Value::Number(v) => Value::String(v.to_string().into()),
         Value::Bytes(v) => Value::String(String::from_utf8_lossy(v.as_slice()).into()),
         v => return Err(ftx.error(format!("cannot convert {:?} to string", v))),
@@ -444,60 +444,11 @@ pub fn exists_one(
     }
 }
 
-pub use time::duration;
-
-pub use time::timestamp;
-
 pub mod time {
     use super::Result;
     use crate::magic::This;
-    use crate::{ExecutionError, Value};
+    use crate::Value;
     use chrono::{Datelike, Days, Months, Timelike};
-
-    /// Duration parses the provided argument into a [`Value::Duration`] value.
-    ///
-    /// The argument must be string, and must be in the format of a duration. See
-    /// the [`parse_duration`] documentation for more information on the supported
-    /// formats.
-    ///
-    /// # Examples
-    /// - `1h` parses as 1 hour
-    /// - `1.5h` parses as 1 hour and 30 minutes
-    /// - `1h30m` parses as 1 hour and 30 minutes
-    /// - `1h30m1s` parses as 1 hour, 30 minutes, and 1 second
-    /// - `1ms` parses as 1 millisecond
-    /// - `1.5ms` parses as 1 millisecond and 500 microseconds
-    /// - `1ns` parses as 1 nanosecond
-    /// - `1.5ns` parses as 1 nanosecond (sub-nanosecond durations not supported)
-    pub fn duration(value: Value) -> crate::functions::Result<Value> {
-        let stringify: String = value.into();
-        Ok(Value::Duration(_duration(&stringify)?))
-    }
-
-    /// Timestamp parses the provided argument into a [`Value::Timestamp`] value.
-    /// The
-    pub fn timestamp(value: Value) -> Result<Value> {
-        let stringify: String = value.into();
-        Ok(Value::Timestamp(
-            chrono::DateTime::parse_from_rfc3339(&stringify)
-                .map(|e| e.with_timezone(&chrono::Utc))
-                .map_err(|e| ExecutionError::function_error("timestamp", e.to_string().as_str()))?,
-        ))
-    }
-
-    /// A wrapper around [`parse_duration`] that converts errors into [`ExecutionError`].
-    /// and only returns the duration, rather than returning the remaining input.
-    fn _duration(i: &str) -> Result<chrono::Duration> {
-        let (_, duration) = crate::duration::parse_duration(i)
-            .map_err(|e| ExecutionError::function_error("duration", e.to_string()))?;
-        Ok(duration)
-    }
-
-    fn _timestamp(i: &str) -> Result<chrono::DateTime<chrono::Utc>> {
-        chrono::DateTime::parse_from_rfc3339(i)
-            .map(|e| e.with_timezone(&chrono::Utc))
-            .map_err(|e| ExecutionError::function_error("timestamp", e.to_string()))
-    }
 
     pub fn timestamp_year(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         Ok(this.year().into())
@@ -704,71 +655,56 @@ mod tests {
 
     #[test]
     fn test_timestamp() {
-        [(
-                "comparison",
-                "timestamp('2023-05-29T00:00:00Z') > timestamp('2023-05-28T00:00:00Z')",
-            ),
-            (
-                "comparison",
-                "timestamp('2023-05-29T00:00:00Z') < timestamp('2023-05-30T00:00:00Z')",
-            ),
+        [
+            ("comparison", "2023-05-29T00:00:00Z > 2023-05-28T00:00:00Z"),
+            ("comparison", "2023-05-29T00:00:00Z < 2023-05-30T00:00:00Z"),
             (
                 "subtracting duration",
-                "timestamp('2023-05-29T00:00:00Z') - duration('24h') == timestamp('2023-05-28T00:00:00Z')",
+                "2023-05-29T00:00:00Z - 24h == 2023-05-28T00:00:00Z",
             ),
             (
                 "subtracting date",
-                "timestamp('2023-05-29T00:00:00Z') - timestamp('2023-05-28T00:00:00Z') == duration('24h')",
+                "2023-05-29T00:00:00Z - 2023-05-28T00:00:00Z == 24h",
             ),
             (
                 "adding duration",
-                "timestamp('2023-05-28T00:00:00Z') + duration('24h') == timestamp('2023-05-29T00:00:00Z')",
+                "2023-05-28T00:00:00Z + 24h == 2023-05-29T00:00:00Z",
             ),
             (
                 "timestamp string",
-                "timestamp('2023-05-28T00:00:00Z').string() == '2023-05-28T00:00:00+00:00'",
+                "2023-05-28T00:00:00Z.string() == '2023-05-28T00:00:00+00:00'",
             ),
             (
                 "timestamp getFullYear",
-                "timestamp('2023-05-28T00:00:00Z').getFullYear() == 2023",
+                "2023-05-28T00:00:00Z.getFullYear() == 2023",
             ),
-            (
-                "timestamp getMonth",
-                "timestamp('2023-05-28T00:00:00Z').getMonth() == 4",
-            ),
+            ("timestamp getMonth", "2023-05-28T00:00:00Z.getMonth() == 4"),
             (
                 "timestamp getDayOfMonth",
-                "timestamp('2023-05-28T00:00:00Z').getDayOfMonth() == 27",
+                "2023-05-28T00:00:00Z.getDayOfMonth() == 27",
             ),
             (
                 "timestamp getDayOfYear",
-                "timestamp('2023-05-28T00:00:00Z').getDayOfYear() == 147",
+                "2023-05-28T00:00:00Z.getDayOfYear() == 147",
             ),
-            (
-                "timestamp getDate",
-                "timestamp('2023-05-28T00:00:00Z').getDate() == 28",
-            ),
+            ("timestamp getDate", "2023-05-28T00:00:00Z.getDate() == 28"),
             (
                 "timestamp getDayOfWeek",
-                "timestamp('2023-05-28T00:00:00Z').getDayOfWeek() == 0",
+                "2023-05-28T00:00:00Z.getDayOfWeek() == 0",
             ),
-            (
-                "timestamp getHours",
-                "timestamp('2023-05-28T02:00:00Z').getHours() == 2",
-            ),
+            ("timestamp getHours", "2023-05-28T02:00:00Z.getHours() == 2"),
             (
                 "timestamp getMinutes",
-                " timestamp('2023-05-28T00:05:00Z').getMinutes() == 5",
+                " 2023-05-28T00:05:00Z.getMinutes() == 5",
             ),
             (
                 "timestamp getSeconds",
-                "timestamp('2023-05-28T00:00:06Z').getSeconds() == 6",
+                "2023-05-28T00:00:06Z.getSeconds() == 6",
             ),
             (
                 "timestamp getMilliseconds",
-                "timestamp('2023-05-28T00:00:42.123Z').getMilliseconds() == 123",
+                "2023-05-28T00:00:42.123Z.getMilliseconds() == 123",
             ),
-
         ]
         .iter()
         .for_each(assert_script);
@@ -777,19 +713,13 @@ mod tests {
     #[test]
     fn test_duration() {
         [
-            ("duration equal 1", "duration('1s') == duration('1000ms')"),
-            ("duration equal 2", "duration('1m') == duration('60s')"),
-            ("duration equal 3", "duration('1h') == duration('60m')"),
-            ("duration comparison 1", "duration('1m') > duration('1s')"),
-            ("duration comparison 2", "duration('1m') < duration('1h')"),
-            (
-                "duration subtraction",
-                "duration('1h') - duration('1m') == duration('59m')",
-            ),
-            (
-                "duration addition",
-                "duration('1h') + duration('1m') == duration('1h1m')",
-            ),
+            ("duration equal 1", "1s == 1000ms"),
+            ("duration equal 2", "1m == 60s"),
+            ("duration equal 3", "1h == 60m"),
+            ("duration comparison 1", "1m > 1s"),
+            ("duration comparison 2", "1m < 1h"),
+            ("duration subtraction", "1h - 1m == 59m"),
+            ("duration addition", "1h + 1m == 1h1m"),
         ]
         .iter()
         .for_each(assert_script);
@@ -806,7 +736,7 @@ mod tests {
             .add_variable("ts", crate::Value::Timestamp(ts))
             .unwrap();
 
-        let program = crate::Program::compile("ts == timestamp('2023-05-29T00:00:00Z')").unwrap();
+        let program = crate::Program::compile("ts == 2023-05-29T00:00:00Z").unwrap();
         let result = program.execute(&context).unwrap();
         assert_eq!(result, true.into());
     }
@@ -814,10 +744,10 @@ mod tests {
     #[test]
     fn test_chrono_string() {
         [
-            ("duration", "duration('1h30m').string() == '1h30m0s'"),
+            ("duration", "1h30m.string() == '1h30m0s'"),
             (
                 "timestamp",
-                "timestamp('2023-05-29T00:00:00Z').string() == '2023-05-29T00:00:00+00:00'",
+                "2023-05-29T00:00:00Z.string() == '2023-05-29T00:00:00+00:00'",
             ),
         ]
         .iter()
