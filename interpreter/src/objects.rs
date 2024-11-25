@@ -8,7 +8,7 @@ use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::convert::{Infallible, TryInto};
+use std::convert::TryInto;
 use std::fmt::{Display, Formatter};
 use std::ops;
 
@@ -117,18 +117,6 @@ impl<K: Into<Key>, V: Into<Value>> From<HashMap<K, V>> for ValueMap {
             new_map.insert(k.into(), v.into());
         }
         ValueMap { map: new_map }
-    }
-}
-
-pub trait TryIntoValue {
-    type Error: std::error::Error + 'static;
-    fn try_into_value(self) -> Result<Value, Self::Error>;
-}
-
-impl TryIntoValue for Value {
-    type Error = Infallible;
-    fn try_into_value(self) -> Result<Value, Self::Error> {
-        Ok(self)
     }
 }
 
@@ -969,12 +957,8 @@ mod tests {
         let program = Program::compile("size(requests) + size == 5").unwrap();
         let mut context = Context::default();
         let requests = vec![Value::Number(42.into()), Value::Number(42.into())];
-        context
-            .add_variable("requests", Value::List(requests.into()))
-            .unwrap();
-        context
-            .add_variable("size", Value::Number(3.into()))
-            .unwrap();
+        context.add_variable_from_value("requests", Value::List(requests.into()));
+        context.add_variable_from_value("size", Value::Number(3.into()));
         assert_eq!(program.execute(&context).unwrap(), Value::Bool(true));
     }
 
@@ -1060,9 +1044,7 @@ mod tests {
     fn out_of_bound_list_access() {
         let program = Program::compile("list[10]").unwrap();
         let mut context = Context::default();
-        context
-            .add_variable("list", Value::List(vec![].into()))
-            .unwrap();
+        context.add_variable_from_value("list", Value::List(vec![].into()));
         let result = program.execute(&context);
         assert_eq!(result.unwrap(), Value::Null);
     }

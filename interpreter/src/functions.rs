@@ -735,9 +735,7 @@ mod tests {
             chrono::DateTime::parse_from_rfc3339("2023-05-29T00:00:00Z")
                 .map(|e| e.with_timezone(&chrono::Utc))
                 .unwrap();
-        context
-            .add_variable("ts", crate::Value::Timestamp(ts))
-            .unwrap();
+        context.add_variable_from_value("ts", crate::Value::Timestamp(ts));
 
         let program = crate::Program::compile("ts == 2023-05-29T00:00:00Z").unwrap();
         let result = program.execute(&context).unwrap();
