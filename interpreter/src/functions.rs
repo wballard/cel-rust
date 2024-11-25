@@ -1,6 +1,6 @@
 use crate::context::Context;
 use crate::magic::{Arguments, Identifier, This};
-use crate::objects::{Value, ValueType};
+use crate::objects::{Value, ValueList, ValueType};
 use crate::resolvers::{Argument, Resolver};
 use crate::ExecutionError;
 use cel_parser::{format_duration, Expression};
@@ -74,7 +74,8 @@ impl<'context> FunctionContext<'context> {
 /// ```
 pub fn size(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
     let size = match this {
-        Value::List(l) => l.len(),
+        Value::List(l) => l.list.len(),
+        Value::TagSet(t) => t.set.len(),
         Value::Map(m) => m.map.len(),
         Value::String(s) => s.len(),
         Value::Bytes(b) => b.len(),
@@ -116,7 +117,7 @@ pub fn size(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
 /// ```
 pub fn contains(This(this): This<Value>, arg: Value) -> Result<Value> {
     Ok(match this {
-        Value::List(v) => v.contains(&arg),
+        Value::List(v) => v.list.contains(&arg),
         Value::Map(v) => v
             .map
             .contains_key(&arg.try_into().map_err(ExecutionError::UnsupportedKeyType)?),
@@ -153,10 +154,10 @@ pub fn string(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
     Ok(match this {
         Value::String(v) => Value::String(v.clone()),
 
-        Value::Timestamp(t) => Value::String(t.to_rfc3339().into()),
+        Value::Timestamp(t) => Value::String(t.to_rfc3339()),
 
-        Value::Duration(v) => Value::String(format_duration(&v).into()),
-        Value::Number(v) => Value::String(v.to_string().into()),
+        Value::Duration(v) => Value::String(format_duration(&v)),
+        Value::Number(v) => Value::String(v.to_string()),
         Value::Bytes(v) => Value::String(String::from_utf8_lossy(v.as_slice()).into()),
         v => return Err(ftx.error(format!("cannot convert {:?} to string", v))),
     })
@@ -246,14 +247,14 @@ pub fn map(
 ) -> Result<Value> {
     match this {
         Value::List(items) => {
-            let mut values = Vec::with_capacity(items.len());
+            let mut values = Vec::with_capacity(items.list.len());
             let mut ptx = ftx.ptx.new_inner_scope();
-            for item in items.iter() {
+            for item in items.list.iter() {
                 ptx.add_variable_from_value(ident.clone(), item.clone());
                 let value = ptx.resolve(&expr)?;
                 values.push(value);
             }
-            Value::List(values)
+            Value::List(ValueList { list: values })
         }
         Value::Map(map) => {
             let mut values = Vec::with_capacity(map.map.len());
@@ -263,7 +264,7 @@ pub fn map(
                 let value = ptx.resolve(&expr)?;
                 values.push(value);
             }
-            Value::List(values)
+            Value::List(ValueList { list: values })
         }
         _ => return Err(this.error_expected_type(ValueType::List)),
     }
@@ -289,15 +290,15 @@ pub fn filter(
 ) -> Result<Value> {
     match this {
         Value::List(items) => {
-            let mut values = Vec::with_capacity(items.len());
+            let mut values = Vec::with_capacity(items.list.len());
             let mut ptx = ftx.ptx.new_inner_scope();
-            for item in items.iter() {
+            for item in items.list.iter() {
                 ptx.add_variable_from_value(ident.clone(), item.clone());
                 if let Value::Bool(true) = ptx.resolve(&expr)? {
                     values.push(item.clone());
                 }
             }
-            Value::List(values)
+            Value::List(ValueList { list: values })
         }
         _ => return Err(this.error_expected_type(ValueType::List)),
     }
@@ -325,7 +326,7 @@ pub fn all(
     return match this {
         Value::List(items) => {
             let mut ptx = ftx.ptx.new_inner_scope();
-            for item in items.iter() {
+            for item in items.list.iter() {
                 ptx.add_variable_from_value(&ident, item);
                 if let Value::Bool(false) = ptx.resolve(&expr)? {
                     return Ok(false);
@@ -369,7 +370,7 @@ pub fn exists(
     match this {
         Value::List(items) => {
             let mut ptx = ftx.ptx.new_inner_scope();
-            for item in items.iter() {
+            for item in items.list.iter() {
                 ptx.add_variable_from_value(&ident, item);
                 if let Value::Bool(true) = ptx.resolve(&expr)? {
                     return Ok(true);
@@ -415,7 +416,7 @@ pub fn exists_one(
         Value::List(items) => {
             let mut ptx = ftx.ptx.new_inner_scope();
             let mut exists = false;
-            for item in items.iter() {
+            for item in items.list.iter() {
                 ptx.add_variable_from_value(&ident, item);
                 if let Value::Bool(true) = ptx.resolve(&expr)? {
                     if exists {
@@ -498,25 +499,27 @@ pub mod time {
 
 pub fn max(Arguments(args): Arguments) -> Result<Value> {
     // If items is a list of values, then operate on the list
-    let items = if args.len() == 1 {
-        match &args[0] {
+    let items = if args.list.len() == 1 {
+        match &args.list[0] {
             Value::List(values) => values,
-            _ => return Ok(args[0].clone()),
+            _ => return Ok(args.list[0].clone()),
         }
     } else {
         &args
     };
 
     items
+        .list
         .iter()
         .skip(1)
-        .try_fold(items.first().unwrap_or(&Value::Null), |acc, x| {
-            match acc.partial_cmp(x) {
+        .try_fold(
+            items.list.first().unwrap_or(&Value::Null),
+            |acc, x| match acc.partial_cmp(x) {
                 Some(Ordering::Greater) => Ok(acc),
                 Some(_) => Ok(x),
                 None => Err(ExecutionError::ValuesNotComparable(acc.clone(), x.clone())),
-            }
-        })
+            },
+        )
         .cloned()
 }
 

@@ -6,38 +6,49 @@ use cel_parser::ast::*;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::{Infallible, TryInto};
 use std::fmt::{Display, Formatter};
 use std::ops;
-use std::sync::Arc;
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct List {
-    pub list: Arc<Vec<Value>>,
+#[derive(Debug, PartialEq, Clone, Hash, PartialOrd, Ord, Eq)]
+pub struct ValueList {
+    pub list: Vec<Value>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct Map {
-    pub map: Arc<HashMap<Key, Value>>,
-}
-
-impl PartialOrd for Map {
-    fn partial_cmp(&self, _: &Self) -> Option<Ordering> {
-        None
+impl From<Vec<Value>> for ValueList {
+    fn from(list: Vec<Value>) -> Self {
+        ValueList { list }
     }
 }
 
-impl Map {
+#[derive(Debug, PartialEq, Clone, Hash, PartialOrd, Ord, Eq)]
+pub struct ValueSet {
+    pub set: BTreeSet<Value>,
+}
+
+impl From<Vec<Value>> for ValueSet {
+    fn from(list: Vec<Value>) -> Self {
+        ValueSet {
+            set: list.into_iter().collect(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Hash, PartialOrd, Ord, Eq)]
+pub struct ValueMap {
+    pub map: BTreeMap<Key, Value>,
+}
+
+impl ValueMap {
     /// Returns a reference to the value corresponding to the key.
     pub fn get(&self, key: &Key) -> Option<&Value> {
         self.map.get(key)
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Hash, Ord, Clone, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Eq, PartialEq, Hash, Ord, Clone, PartialOrd)]
 pub enum Key {
     Number(Decimal),
     Bool(bool),
@@ -99,15 +110,13 @@ impl TryInto<Key> for Value {
     }
 }
 
-impl<K: Into<Key>, V: Into<Value>> From<HashMap<K, V>> for Map {
+impl<K: Into<Key>, V: Into<Value>> From<HashMap<K, V>> for ValueMap {
     fn from(map: HashMap<K, V>) -> Self {
-        let mut new_map = HashMap::new();
+        let mut new_map = BTreeMap::new();
         for (k, v) in map {
             new_map.insert(k.into(), v.into());
         }
-        Map {
-            map: Arc::new(new_map),
-        }
+        ValueMap { map: new_map }
     }
 }
 
@@ -135,8 +144,9 @@ impl From<Key> for String {
 
 #[derive(Debug, Clone)]
 pub enum Value {
-    List(Vec<Value>),
-    Map(Map),
+    List(ValueList),
+    TagSet(ValueSet),
+    Map(ValueMap),
 
     Function(String, Option<Box<Value>>),
 
@@ -145,12 +155,11 @@ pub enum Value {
     String(String),
     Bytes(Vec<u8>),
     Bool(bool),
-
     Duration(chrono::Duration),
-
     Timestamp(chrono::DateTime<chrono::Utc>),
     Null,
     Ulid(ulid::Ulid),
+    Tag(String),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -166,12 +175,15 @@ pub enum ValueType {
     Timestamp,
     Null,
     Ulid,
+    Tag,
+    TagSet,
 }
 
 impl Display for ValueType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ValueType::List => write!(f, "list"),
+            ValueType::TagSet => write!(f, "tagset"),
             ValueType::Map => write!(f, "map"),
             ValueType::Function => write!(f, "function"),
             ValueType::Number => write!(f, "number"),
@@ -182,6 +194,7 @@ impl Display for ValueType {
             ValueType::Timestamp => write!(f, "timestamp"),
             ValueType::Null => write!(f, "null"),
             ValueType::Ulid => write!(f, "ulid"),
+            ValueType::Tag => write!(f, "tag"),
         }
     }
 }
@@ -202,6 +215,8 @@ impl Value {
             Value::Timestamp(_) => ValueType::Timestamp,
             Value::Null => ValueType::Null,
             Value::Ulid(_) => ValueType::Ulid,
+            Value::Tag(_) => ValueType::Tag,
+            Value::TagSet(_) => ValueType::TagSet,
         }
     }
 
@@ -283,6 +298,8 @@ impl PartialEq for Value {
 
             (Value::Timestamp(a), Value::Timestamp(b)) => a == b,
             (Value::Ulid(a), Value::Ulid(b)) => a == b,
+            (Value::Tag(a), Value::Tag(b)) => a == b,
+            (Value::TagSet(a), Value::TagSet(b)) => a == b,
             (_, _) => false,
         }
     }
@@ -290,20 +307,50 @@ impl PartialEq for Value {
 
 impl Eq for Value {}
 
+impl std::hash::Hash for Value {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Value::Map(map) => map.hash(state),
+            Value::List(list) => list.hash(state),
+            Value::Function(name, target) => {
+                name.hash(state);
+                target.hash(state);
+            }
+            Value::Number(v) => v.hash(state),
+            Value::String(v) => v.hash(state),
+            Value::Bytes(v) => v.hash(state),
+            Value::Bool(v) => v.hash(state),
+            Value::Null => Value::Null.hash(state),
+
+            Value::Duration(v) => v.hash(state),
+
+            Value::Timestamp(v) => v.hash(state),
+            Value::Ulid(v) => v.hash(state),
+            Value::Tag(v) => v.hash(state),
+            Value::TagSet(v) => v.hash(state),
+        }
+    }
+}
+
+impl Ord for Value {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Value::Number(a), Value::Number(b)) => a.cmp(b),
+            (Value::String(a), Value::String(b)) => a.cmp(b),
+            (Value::Bool(a), Value::Bool(b)) => a.cmp(b),
+            (Value::Null, Value::Null) => Ordering::Equal,
+            (Value::Duration(a), Value::Duration(b)) => a.cmp(b),
+            (Value::Timestamp(a), Value::Timestamp(b)) => a.cmp(b),
+            (Value::Ulid(a), Value::Ulid(b)) => a.cmp(b),
+            (Value::Tag(a), Value::Tag(b)) => a.cmp(b),
+            _ => Ordering::Equal,
+        }
+    }
+}
+
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            (Value::Number(a), Value::Number(b)) => a.partial_cmp(b),
-            (Value::String(a), Value::String(b)) => Some(a.cmp(b)),
-            (Value::Bool(a), Value::Bool(b)) => Some(a.cmp(b)),
-            (Value::Null, Value::Null) => Some(Ordering::Equal),
-
-            (Value::Duration(a), Value::Duration(b)) => Some(a.cmp(b)),
-
-            (Value::Timestamp(a), Value::Timestamp(b)) => Some(a.cmp(b)),
-            (Value::Ulid(a), Value::Ulid(b)) => a.partial_cmp(b),
-            _ => None,
-        }
+        Some(self.cmp(other))
     }
 }
 
@@ -335,13 +382,15 @@ impl From<&Key> for Key {
 
 impl<T: Into<Value>> From<Vec<T>> for Value {
     fn from(v: Vec<T>) -> Self {
-        Value::List(v.into_iter().map(|v| v.into()).collect::<Vec<_>>().into())
+        Value::List(ValueList {
+            list: v.into_iter().map(|v| v.into()).collect::<Vec<_>>(),
+        })
     }
 }
 
 impl From<&str> for Value {
     fn from(v: &str) -> Self {
-        Value::String(v.to_string().into())
+        Value::String(v.to_string())
     }
 }
 
@@ -392,7 +441,7 @@ impl From<Value> for String {
             Value::List(v) => {
                 let mut buf = String::new();
                 buf.push('[');
-                for (i, v) in v.iter().enumerate() {
+                for (i, v) in v.list.iter().enumerate() {
                     if i > 0 {
                         buf.push_str(", ");
                     }
@@ -487,7 +536,7 @@ impl<'a> Value {
                     RelationOp::NotEquals => right.ne(&left),
                     RelationOp::In => match (left, right) {
                         (Value::String(l), Value::String(r)) => r.contains(&*l),
-                        (any, Value::List(v)) => v.contains(&any),
+                        (any, Value::List(v)) => v.list.contains(&any),
                         (any, Value::Map(m)) => match any.try_into() {
                             Ok(key) => m.map.contains_key(&key),
                             Err(_) => false,
@@ -544,8 +593,17 @@ impl<'a> Value {
                     .collect::<Result<Vec<_>, _>>()?;
                 Value::List(list.into()).into()
             }
+            Expression::TagSet(items) => {
+                // reduce the expressions to a list of tag values
+                let list: Vec<_> = items
+                    .iter()
+                    .flat_map(|i| Value::resolve(i, ctx))
+                    .map(|v| Value::Tag(v.into()))
+                    .collect();
+                Value::TagSet(list.into()).into()
+            }
             Expression::Map(items) => {
-                let mut map = HashMap::default();
+                let mut map = BTreeMap::default();
                 for (k, v) in items.iter() {
                     let key = Value::resolve(k, ctx)?
                         .try_into()
@@ -553,9 +611,7 @@ impl<'a> Value {
                     let value = Value::resolve(v, ctx)?;
                     map.insert(key, value);
                 }
-                Ok(Value::Map(Map {
-                    map: Arc::from(map),
-                }))
+                Ok(Value::Map(ValueMap { map }))
             }
             Expression::Ident(name) => ctx.get_variable(name),
             Expression::FunctionCall(name, target, args) => {
@@ -602,6 +658,7 @@ impl<'a> Value {
                 let idx = Value::resolve(idx, ctx)?;
                 match (self, idx) {
                     (Value::List(items), Value::Number(idx)) => items
+                        .list
                         .get(idx.to_usize().unwrap())
                         .cloned()
                         .unwrap_or(Value::Null)
@@ -660,8 +717,9 @@ impl<'a> Value {
     #[inline(always)]
     fn to_bool(&self) -> bool {
         match self {
-            Value::List(v) => !v.is_empty(),
+            Value::List(v) => !v.list.is_empty(),
             Value::Map(v) => !v.map.is_empty(),
+            Value::TagSet(v) => !v.set.is_empty(),
             Value::Number(v) => *v != dec!(0),
             Value::String(v) => !v.is_empty(),
             Value::Bytes(v) => !v.is_empty(),
@@ -673,6 +731,7 @@ impl<'a> Value {
             Value::Timestamp(v) => v.timestamp_nanos_opt().unwrap_or_default() > 0,
             Value::Function(_, _) => false,
             Value::Ulid(_) => true,
+            Value::Tag(_) => true,
         }
     }
 }
@@ -689,6 +748,7 @@ impl From<&Atom> for Value {
             Atom::Ulid(v) => Value::Ulid(*v),
             Atom::DateTime(v) => Value::Timestamp(*v),
             Atom::Duration(v) => Value::Duration(*v),
+            Atom::Tag(v) => Value::String(v.clone()),
         }
     }
 }
@@ -701,9 +761,15 @@ impl ops::Add<Value> for Value {
         match (self, rhs) {
             (Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r).into(),
             (Value::Number(l), Value::Number(r)) => Value::Number(l + r).into(),
-            (Value::List(l), Value::List(r)) => {
-                Value::List(l.iter().chain(r.iter()).cloned().collect::<Vec<_>>()).into()
-            }
+            (Value::List(l), Value::List(r)) => Value::List(
+                l.list
+                    .iter()
+                    .chain(r.list.iter())
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .into(),
+            )
+            .into(),
             (Value::String(l), Value::String(r)) => {
                 let mut new = String::with_capacity(l.len() + r.len());
                 new.push_str(&l);
@@ -724,14 +790,14 @@ impl ops::Add<Value> for Value {
             }
             // Merge two maps should overwrite keys in the left map with the right map
             (Value::Map(l), Value::Map(r)) => {
-                let mut new = HashMap::default();
+                let mut new = BTreeMap::default();
                 for (k, v) in l.map.iter() {
                     new.insert(k.clone(), v.clone());
                 }
                 for (k, v) in r.map.iter() {
                     new.insert(k.clone(), v.clone());
                 }
-                Value::Map(Map { map: new.into() }).into()
+                Value::Map(ValueMap { map: new }).into()
             }
             (Value::Null, Value::Null) => Value::Null.into(),
 
@@ -904,7 +970,7 @@ mod tests {
         let mut context = Context::default();
         let requests = vec![Value::Number(42.into()), Value::Number(42.into())];
         context
-            .add_variable("requests", Value::List(requests))
+            .add_variable("requests", Value::List(requests.into()))
             .unwrap();
         context
             .add_variable("size", Value::Number(3.into()))
@@ -935,7 +1001,7 @@ mod tests {
         let result = program.execute(&context);
         assert_eq!(
             result.unwrap(),
-            Value::List(vec![1.into(), 2.into(), 3.into(), 4.into()])
+            Value::List(vec![1.into(), 2.into(), 3.into(), 4.into()].into())
         );
     }
 
@@ -994,7 +1060,9 @@ mod tests {
     fn out_of_bound_list_access() {
         let program = Program::compile("list[10]").unwrap();
         let mut context = Context::default();
-        context.add_variable("list", Value::List(vec![])).unwrap();
+        context
+            .add_variable("list", Value::List(vec![].into()))
+            .unwrap();
         let result = program.execute(&context);
         assert_eq!(result.unwrap(), Value::Null);
     }
@@ -1009,7 +1077,7 @@ mod tests {
         let indirect: Value = vec.into();
         assert_eq!(
             indirect,
-            Value::List(vec![Value::String("example".to_string())])
+            Value::List(vec![Value::String("example".to_string())].into())
         );
     }
 
@@ -1040,5 +1108,41 @@ mod tests {
         let context = Context::default();
         let result = program.execute(&context);
         assert_eq!(result.unwrap(), Value::Bool(true));
+    }
+
+    #[test]
+    fn tag_set() {
+        let program = Program::compile("{# #1, #2, #3 #}").unwrap();
+        let context = Context::default();
+        let result = program.execute(&context);
+        assert_eq!(
+            result.unwrap(),
+            Value::TagSet(
+                vec![
+                    Value::Tag("1".to_string()),
+                    Value::Tag("2".to_string()),
+                    Value::Tag("3".to_string())
+                ]
+                .into()
+            )
+        );
+    }
+
+    #[test]
+    fn tag_set_expression() {
+        let program = Program::compile("{# #1, #2, 'thr' + 'ee' #}").unwrap();
+        let context = Context::default();
+        let result = program.execute(&context);
+        assert_eq!(
+            result.unwrap(),
+            Value::TagSet(
+                vec![
+                    Value::Tag("1".to_string()),
+                    Value::Tag("2".to_string()),
+                    Value::Tag("three".to_string())
+                ]
+                .into()
+            )
+        );
     }
 }

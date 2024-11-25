@@ -11,7 +11,7 @@ pub use cel_parser::error::ParseError;
 pub use cel_parser::Expression;
 pub use context::Context;
 pub use functions::FunctionContext;
-pub use objects::{ResolveResult, Value};
+pub use objects::{ResolveResult, Value, ValueList, ValueSet};
 pub mod functions;
 mod magic;
 pub mod objects;

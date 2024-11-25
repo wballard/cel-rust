@@ -46,6 +46,7 @@ pub enum Expression {
     Map(Vec<(Expression, Expression)>),
     Atom(Atom),
     Ident(String),
+    TagSet(Vec<Expression>),
 }
 
 /// Represents a member access in an expression.
@@ -67,6 +68,7 @@ pub enum Atom {
     Ulid(ulid::Ulid),
     DateTime(chrono::DateTime<chrono::Utc>),
     Duration(chrono::Duration),
+    Tag(String),
 }
 
 impl From<ulid::Ulid> for Atom {
@@ -208,6 +210,11 @@ impl Expression {
                 }
             }
             Expression::List(e) => {
+                for e in e {
+                    e._references(variables, functions);
+                }
+            }
+            Expression::TagSet(e) => {
                 for e in e {
                     e._references(variables, functions);
                 }

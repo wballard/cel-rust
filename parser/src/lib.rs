@@ -250,7 +250,7 @@ mod tests {
         assert_parse_eq(
             "['0', 1, 3.0, null]",
             List(vec![
-                Expression::Atom(String("0".to_string().into())),
+                Expression::Atom(String("0".to_string())),
                 Expression::Atom(Number(dec!(1))),
                 Expression::Atom(Number(dec!(3.0))),
                 Expression::Atom(Null),
@@ -449,7 +449,7 @@ mod tests {
             Ternary(
                 Box::new(Expression::Atom(Bool(true))),
                 Box::new(Expression::Atom(String("result_true".to_string()))),
-                Box::new(Expression::Atom(String("result_false".to_string().into()))),
+                Box::new(Expression::Atom(String("result_false".to_string()))),
             ),
         );
 
@@ -606,8 +606,30 @@ mod tests {
             Atom(
                 (chrono::Duration::hours(1)
                     + chrono::Duration::minutes(1)
-                    + chrono::Duration::seconds(1)).into(),
+                    + chrono::Duration::seconds(1))
+                .into(),
             ),
+        )
+    }
+
+    #[test]
+    fn test_tag() {
+        assert_parse_eq("#foo:bar", Atom(Tag("foo:bar".to_string())))
+    }
+
+    #[test]
+    fn test_tag_space() {
+        assert_parse_eq("#foo bar", Atom(Tag("foo bar".to_string())))
+    }
+
+    #[test]
+    fn test_tag_set() {
+        assert_parse_eq(
+            "{# #foo bar, #💕 #}",
+            TagSet(vec![
+                Atom(Tag("foo bar".to_string())),
+                Atom(Tag("💕".to_string())),
+            ]),
         )
     }
 }

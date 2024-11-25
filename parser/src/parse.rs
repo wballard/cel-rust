@@ -409,12 +409,17 @@ pub fn parse_date(s: &str) -> chrono::DateTime<chrono::Utc> {
 
 pub fn parse_date_time(s: &str) -> chrono::DateTime<chrono::Utc> {
     let date = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S").unwrap();
-    chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(date.into(), chrono::Utc)
+    chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(date, chrono::Utc)
 }
 
 pub fn parse_date_time_zone(s: &str) -> chrono::DateTime<chrono::Utc> {
     let date = chrono::DateTime::parse_from_rfc3339(s).unwrap();
     date.into()
+}
+
+pub fn parse_tag(s: &str) -> String {
+    // skip the first character which is a #
+    s[1..].trim().to_string()
 }
 
 #[cfg(test)]

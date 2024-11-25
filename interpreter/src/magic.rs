@@ -1,6 +1,6 @@
 use crate::macros::{impl_conversions, impl_handler};
 use crate::resolvers::{AllArguments, Argument};
-use crate::{ExecutionError, FunctionContext, ResolveResult, Value};
+use crate::{ExecutionError, FunctionContext, ResolveResult, Value, ValueList};
 use cel_parser::Expression;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -10,7 +10,7 @@ impl_conversions!(
     String => Value::String,
     Vec<u8> => Value::Bytes,
     bool => Value::Bool,
-    Vec<Value> => Value::List
+    ValueList => Value::List
 );
 
 impl_conversions!(
@@ -205,11 +205,11 @@ impl From<Identifier> for String {
 /// # use cel_interpreter::{Value};
 /// use cel_interpreter::extractors::Arguments;
 /// pub fn sum(Arguments(args): Arguments) -> Value {
-///     args.iter().fold(Value::Number(0.into()), |acc, val| (val + acc.clone()).unwrap_or(acc)).into()
+///     args.list.iter().fold(Value::Number(0.into()), |acc, val| (val + acc.clone()).unwrap_or(acc)).into()
 /// }
 /// ```
 #[derive(Clone)]
-pub struct Arguments(pub Vec<Value>);
+pub struct Arguments(pub ValueList);
 
 impl<'a, 'context> FromContext<'a, 'context> for Arguments {
     fn from_context(ctx: &'a mut FunctionContext) -> Result<Self, ExecutionError>
