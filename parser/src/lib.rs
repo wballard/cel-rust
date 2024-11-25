@@ -44,8 +44,8 @@ mod tests {
 
     #[test]
     fn ident() {
-        assert_parse_eq("a", Ident("a".to_string().into()));
-        assert_parse_eq("hello ", Ident("hello".to_string().into()));
+        assert_parse_eq("a", Ident("a".to_string()));
+        assert_parse_eq("hello ", Ident("hello".to_string()));
     }
 
     #[test]
@@ -67,12 +67,12 @@ mod tests {
 
     #[test]
     fn single_quote_str() {
-        assert_parse_eq("'foobar'", Atom(String("foobar".to_string().into())))
+        assert_parse_eq("'foobar'", Atom(String("foobar".to_string())))
     }
 
     #[test]
     fn double_quote_str() {
-        assert_parse_eq(r#""foobar""#, Atom(String("foobar".to_string().into())))
+        assert_parse_eq(r#""foobar""#, Atom(String("foobar".to_string())))
     }
 
     // #[test]
@@ -85,14 +85,14 @@ mod tests {
 
     #[test]
     fn single_quote_bytes() {
-        assert_parse_eq("b'foo'", Atom(Bytes(b"foo".to_vec().into())));
-        assert_parse_eq("b''", Atom(Bytes(b"".to_vec().into())));
+        assert_parse_eq("b'foo'", Atom(Bytes(b"foo".to_vec())));
+        assert_parse_eq("b''", Atom(Bytes(b"".to_vec())));
     }
 
     #[test]
     fn double_quote_bytes() {
-        assert_parse_eq(r#"b"foo""#, Atom(Bytes(b"foo".to_vec().into())));
-        assert_parse_eq(r#"b"""#, Atom(Bytes(b"".to_vec().into())));
+        assert_parse_eq(r#"b"foo""#, Atom(Bytes(b"foo".to_vec())));
+        assert_parse_eq(r#"b"""#, Atom(Bytes(b"".to_vec())));
     }
 
     #[test]
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn simple_str() {
-        assert_parse_eq(r#"'foobar'"#, Atom(String("foobar".to_string().into())));
+        assert_parse_eq(r#"'foobar'"#, Atom(String("foobar".to_string())));
         println!("{:?}", parse(r#"1 == '1'"#))
     }
 
@@ -122,16 +122,16 @@ mod tests {
         assert_parse_eq(
             "[1, 2, 3].map(x, x * 2)",
             FunctionCall(
-                Box::new(Ident("map".to_string().into())),
+                Box::new(Ident("map".to_string())),
                 Some(Box::new(List(vec![
                     Atom(Number(dec!(1))),
                     Atom(Number(dec!(2))),
                     Atom(Number(dec!(3))),
                 ]))),
                 vec![
-                    Ident("x".to_string().into()),
+                    Ident("x".to_string()),
                     Arithmetic(
-                        Box::new(Ident("x".to_string().into())),
+                        Box::new(Ident("x".to_string())),
                         ArithmeticOp::Multiply,
                         Box::new(Atom(Number(dec!(2)))),
                     ),
@@ -146,8 +146,8 @@ mod tests {
             "a.b[1]",
             Member(
                 Member(
-                    Ident("a".to_string().into()).into(),
-                    Attribute("b".to_string().into()).into(),
+                    Ident("a".to_string()).into(),
+                    Attribute("b".to_string()).into(),
                 )
                 .into(),
                 Index(Atom(Number(dec!(1))).into()).into(),
@@ -159,7 +159,7 @@ mod tests {
     fn function_call_no_args() {
         assert_parse_eq(
             "a()",
-            FunctionCall(Box::new(Ident("a".to_string().into())), None, vec![]),
+            FunctionCall(Box::new(Ident("a".to_string())), None, vec![]),
         );
     }
 
@@ -289,11 +289,11 @@ mod tests {
             "{'a': 1, 'b': 2}",
             Map(vec![
                 (
-                    Expression::Atom(String("a".to_string().into())),
+                    Expression::Atom(String("a".to_string())),
                     Expression::Atom(Number(dec!(1))),
                 ),
                 (
-                    Expression::Atom(String("b".to_string().into())),
+                    Expression::Atom(String("b".to_string())),
                     Expression::Atom(Number(dec!(2))),
                 ),
             ]),
@@ -307,11 +307,11 @@ mod tests {
             Member(
                 Box::new(Map(vec![
                     (
-                        Expression::Atom(String("a".to_string().into())),
+                        Expression::Atom(String("a".to_string())),
                         Expression::Atom(Number(dec!(1))),
                     ),
                     (
-                        Expression::Atom(String("b".to_string().into())),
+                        Expression::Atom(String("b".to_string())),
                         Expression::Atom(Number(dec!(2))),
                     ),
                 ])),
@@ -444,7 +444,7 @@ mod tests {
             "true ? 'result_true' : 'result_false'",
             Ternary(
                 Box::new(Expression::Atom(Bool(true))),
-                Box::new(Expression::Atom(String("result_true".to_string().into()))),
+                Box::new(Expression::Atom(String("result_true".to_string()))),
                 Box::new(Expression::Atom(String("result_false".to_string().into()))),
             ),
         );
@@ -465,8 +465,8 @@ mod tests {
             "false ? 'result_true' : 'result_false'",
             Ternary(
                 Box::new(Expression::Atom(Bool(false))),
-                Box::new(Expression::Atom(String("result_true".to_string().into()))),
-                Box::new(Expression::Atom(String("result_false".to_string().into()))),
+                Box::new(Expression::Atom(String("result_true".to_string()))),
+                Box::new(Expression::Atom(String("result_false".to_string()))),
             ),
         );
     }
@@ -476,11 +476,11 @@ mod tests {
         assert_parse_eq(
             "a && b == 'string'",
             And(
-                Box::new(Ident("a".to_string().into())),
+                Box::new(Ident("a".to_string())),
                 Box::new(Relation(
-                    Box::new(Ident("b".to_string().into())),
+                    Box::new(Ident("b".to_string())),
                     RelationOp::Equals,
-                    Box::new(Expression::Atom(String("string".to_string().into()))),
+                    Box::new(Expression::Atom(String("string".to_string()))),
                 )),
             ),
         );
