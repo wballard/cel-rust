@@ -17,7 +17,7 @@ mod magic;
 pub mod objects;
 mod resolvers;
 
-#[cfg(feature = "chrono")]
+
 mod duration;
 
 use magic::FromContext;

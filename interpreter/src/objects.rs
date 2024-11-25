@@ -145,10 +145,10 @@ pub enum Value {
     String(String),
     Bytes(Vec<u8>),
     Bool(bool),
-    #[cfg(feature = "chrono")]
+
     Duration(chrono::Duration),
-    #[cfg(feature = "chrono")]
-    Timestamp(chrono::DateTime<chrono::FixedOffset>),
+
+    Timestamp(chrono::DateTime<chrono::Utc>),
     Null,
     Ulid(ulid::Ulid),
 }
@@ -196,9 +196,9 @@ impl Value {
             Value::String(_) => ValueType::String,
             Value::Bytes(_) => ValueType::Bytes,
             Value::Bool(_) => ValueType::Bool,
-            #[cfg(feature = "chrono")]
+
             Value::Duration(_) => ValueType::Duration,
-            #[cfg(feature = "chrono")]
+
             Value::Timestamp(_) => ValueType::Timestamp,
             Value::Null => ValueType::Null,
             Value::Ulid(_) => ValueType::Ulid,
@@ -278,9 +278,9 @@ impl PartialEq for Value {
             (Value::Bytes(a), Value::Bytes(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Null, Value::Null) => true,
-            #[cfg(feature = "chrono")]
+
             (Value::Duration(a), Value::Duration(b)) => a == b,
-            #[cfg(feature = "chrono")]
+
             (Value::Timestamp(a), Value::Timestamp(b)) => a == b,
             (Value::Ulid(a), Value::Ulid(b)) => a == b,
             (_, _) => false,
@@ -297,9 +297,9 @@ impl PartialOrd for Value {
             (Value::String(a), Value::String(b)) => Some(a.cmp(b)),
             (Value::Bool(a), Value::Bool(b)) => Some(a.cmp(b)),
             (Value::Null, Value::Null) => Some(Ordering::Equal),
-            #[cfg(feature = "chrono")]
+
             (Value::Duration(a), Value::Duration(b)) => Some(a.cmp(b)),
-            #[cfg(feature = "chrono")]
+
             (Value::Timestamp(a), Value::Timestamp(b)) => Some(a.cmp(b)),
             (Value::Ulid(a), Value::Ulid(b)) => a.partial_cmp(b),
             _ => None,
@@ -667,9 +667,9 @@ impl<'a> Value {
             Value::Bytes(v) => !v.is_empty(),
             Value::Bool(v) => *v,
             Value::Null => false,
-            #[cfg(feature = "chrono")]
+
             Value::Duration(v) => v.num_nanoseconds().map(|n| n != 0).unwrap_or(false),
-            #[cfg(feature = "chrono")]
+
             Value::Timestamp(v) => v.timestamp_nanos_opt().unwrap_or_default() > 0,
             Value::Function(_, _) => false,
             Value::Ulid(_) => true,
@@ -687,6 +687,7 @@ impl From<&Atom> for Value {
             Atom::Bool(v) => Value::Bool(*v),
             Atom::Null => Value::Null,
             Atom::Ulid(v) => Value::Ulid(*v),
+            Atom::DateTime(v) => Value::Timestamp(*v),
         }
     }
 }
@@ -732,11 +733,11 @@ impl ops::Add<Value> for Value {
                 Value::Map(Map { map: new.into() }).into()
             }
             (Value::Null, Value::Null) => Value::Null.into(),
-            #[cfg(feature = "chrono")]
+
             (Value::Duration(l), Value::Duration(r)) => Value::Duration(l + r).into(),
-            #[cfg(feature = "chrono")]
+
             (Value::Timestamp(l), Value::Duration(r)) => Value::Timestamp(l + r).into(),
-            #[cfg(feature = "chrono")]
+
             (Value::Duration(l), Value::Timestamp(r)) => Value::Timestamp(r + l).into(),
             (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
                 "add", left, right,
@@ -772,11 +773,10 @@ impl ops::Sub<Value> for Value {
         match (self, rhs) {
             (Value::Number(l), Value::Number(r)) => Value::Number(l - r).into(),
 
-            #[cfg(feature = "chrono")]
             (Value::Duration(l), Value::Duration(r)) => Value::Duration(l - r).into(),
-            #[cfg(feature = "chrono")]
+
             (Value::Timestamp(l), Value::Duration(r)) => Value::Timestamp(l - r).into(),
-            #[cfg(feature = "chrono")]
+
             (Value::Timestamp(l), Value::Timestamp(r)) => Value::Duration(l - r).into(),
             (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
                 "sub", left, right,

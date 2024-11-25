@@ -402,6 +402,11 @@ where
         })
 }
 
+pub fn parse_date(s: &str) -> chrono::DateTime<chrono::Utc> {
+    let date = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+    chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(date.into(), chrono::Utc)
+}
+
 #[cfg(test)]
 mod tests {
     use crate::parse::ParseSequenceError;

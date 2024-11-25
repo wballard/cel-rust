@@ -10,6 +10,7 @@ categories = ["parsing"]
 
 [dependencies]
 lalrpop-util = { version = "0.22.0", features = ["lexer"] }
+chrono = { version = "0.4.38", default-features = true, features = ["serde"]}
 regex = "1.4.2"
 thiserror = "1.0.40"
 ulid = "1.1.3"

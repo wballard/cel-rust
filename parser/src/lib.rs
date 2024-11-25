@@ -27,6 +27,7 @@ pub fn parse(input: &str) -> Result<Expression, ParseError> {
 
 #[cfg(test)]
 mod tests {
+    use chrono::TimeZone;
     use rust_decimal_macros::dec;
     use ulid::Ulid;
 
@@ -548,6 +549,14 @@ mod tests {
                     .unwrap()
                     .into(),
             ),
+        )
+    }
+
+    #[test]
+    fn test_date() {
+        assert_parse_eq(
+            "2021-01-01",
+            Atom(chrono::Utc.with_ymd_and_hms(2021, 1, 1, 0, 0, 0).unwrap().into())
         )
     }
 }

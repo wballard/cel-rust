@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+/// Represents a relational operator in an expression.
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum RelationOp {
     LessThan,
@@ -11,6 +12,7 @@ pub enum RelationOp {
     In,
 }
 
+/// Represents an arithmetic operator in an expression.
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub enum ArithmeticOp {
     Add,
@@ -29,6 +31,7 @@ pub enum UnaryOp {
     DoubleMinus,
 }
 
+/// Represents an expression in the abstract syntax tree (AST).
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Arithmetic(Box<Expression>, ArithmeticOp, Box<Expression>),
@@ -45,6 +48,7 @@ pub enum Expression {
     Ident(String),
 }
 
+/// Represents a member access in an expression.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Member {
     Attribute(String),
@@ -52,6 +56,7 @@ pub enum Member {
     Fields(Vec<(String, Expression)>),
 }
 
+/// Represents an atomic value in an expression.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Atom {
     Number(rust_decimal::Decimal),
@@ -60,6 +65,7 @@ pub enum Atom {
     Bool(bool),
     Null,
     Ulid(ulid::Ulid),
+    DateTime(chrono::DateTime<chrono::Utc>),
 }
 
 impl From<ulid::Ulid> for Atom {
@@ -71,6 +77,12 @@ impl From<ulid::Ulid> for Atom {
 impl From<rust_decimal::Decimal> for Atom {
     fn from(decimal: rust_decimal::Decimal) -> Self {
         Atom::Number(decimal)
+    }
+}
+
+impl From<chrono::DateTime<chrono::Utc>> for Atom {
+    fn from(datetime: chrono::DateTime<chrono::Utc>) -> Self {
+        Atom::DateTime(datetime)
     }
 }
 
@@ -94,7 +106,7 @@ impl<'expr> ExpressionReferences<'expr> {
         self.variables.contains(name.as_ref())
     }
 
-    /// Returns true if the expression references the provided variable name.
+    /// Returns true if the expression references the provided function name.
     ///
     /// # Example
     /// ```rust
@@ -135,9 +147,7 @@ impl<'expr> ExpressionReferences<'expr> {
 }
 
 impl Expression {
-    /// Returns a set of all variables referenced in the expression. Variable identifiers
-    /// are represented internally as [`Arc<String>`] and this function simply clones those
-    /// references into a [`HashSet`].
+    /// Returns a set of all variables and functions referenced in the expression.
     ///
     /// # Example
     /// ```rust

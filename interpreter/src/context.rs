@@ -181,7 +181,6 @@ impl<'a> Default for Context<'a> {
         #[cfg(feature = "regex")]
         ctx.add_function("matches", functions::matches);
 
-        #[cfg(feature = "chrono")]
         {
             ctx.add_function("duration", functions::duration);
             ctx.add_function("timestamp", functions::timestamp);

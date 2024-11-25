@@ -1,7 +1,8 @@
-use crate::{RelationOp, ArithmeticOp, Expression, UnaryOp, Member, Atom, parse_bytes, parse_string};
+use crate::{RelationOp, ArithmeticOp, Expression, UnaryOp, Member, Atom, parse_bytes, parse_string, parse_date};
 use std::str::FromStr;
 use ulid::Ulid;
 use rust_decimal::Decimal;
+
 
 grammar;
 
@@ -11,6 +12,7 @@ match {
    r"//[^\n\r]*[\n\r]*" => { },
 } else {
     r"[0123456789ABCDEFGHJKMNPQRSTVWXYZ]{26}" => ULID,
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}" => DATE
 } else {
     r"-?[0-9]+" => INT,
    _
@@ -167,6 +169,9 @@ Atom: Atom = {
 
     // ULID in base 32
     ULID => Atom::Ulid(Ulid::from_string(<>).unwrap().into()),
+
+    // UTC date
+    DATE => Atom::DateTime(parse_date(<>))
 };
 
 Ident: String = {

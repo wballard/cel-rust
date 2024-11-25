@@ -152,9 +152,9 @@ pub fn contains(This(this): This<Value>, arg: Value) -> Result<Value> {
 pub fn string(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
     Ok(match this {
         Value::String(v) => Value::String(v.clone()),
-        #[cfg(feature = "chrono")]
+
         Value::Timestamp(t) => Value::String(t.to_rfc3339().into()),
-        #[cfg(feature = "chrono")]
+
         Value::Duration(v) => Value::String(crate::duration::format_duration(&v).into()),
         Value::Number(v) => Value::String(v.to_string().into()),
         Value::Bytes(v) => Value::String(String::from_utf8_lossy(v.as_slice()).into()),
@@ -444,12 +444,10 @@ pub fn exists_one(
     }
 }
 
-#[cfg(feature = "chrono")]
 pub use time::duration;
-#[cfg(feature = "chrono")]
+
 pub use time::timestamp;
 
-#[cfg(feature = "chrono")]
 pub mod time {
     use super::Result;
     use crate::magic::This;
@@ -482,6 +480,7 @@ pub mod time {
         let stringify: String = value.into();
         Ok(Value::Timestamp(
             chrono::DateTime::parse_from_rfc3339(&stringify)
+                .map(|e| e.with_timezone(&chrono::Utc))
                 .map_err(|e| ExecutionError::function_error("timestamp", e.to_string().as_str()))?,
         ))
     }
@@ -494,26 +493,21 @@ pub mod time {
         Ok(duration)
     }
 
-    fn _timestamp(i: &str) -> Result<chrono::DateTime<chrono::FixedOffset>> {
+    fn _timestamp(i: &str) -> Result<chrono::DateTime<chrono::Utc>> {
         chrono::DateTime::parse_from_rfc3339(i)
+            .map(|e| e.with_timezone(&chrono::Utc))
             .map_err(|e| ExecutionError::function_error("timestamp", e.to_string()))
     }
 
-    pub fn timestamp_year(
-        This(this): This<chrono::DateTime<chrono::FixedOffset>>,
-    ) -> Result<Value> {
+    pub fn timestamp_year(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         Ok(this.year().into())
     }
 
-    pub fn timestamp_month(
-        This(this): This<chrono::DateTime<chrono::FixedOffset>>,
-    ) -> Result<Value> {
+    pub fn timestamp_month(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         Ok((this.month0() as i32).into())
     }
 
-    pub fn timestamp_year_day(
-        This(this): This<chrono::DateTime<chrono::FixedOffset>>,
-    ) -> Result<Value> {
+    pub fn timestamp_year_day(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         let year = this
             .checked_sub_days(Days::new(this.day0() as u64))
             .unwrap()
@@ -522,45 +516,31 @@ pub mod time {
         Ok(this.signed_duration_since(year).num_days().into())
     }
 
-    pub fn timestamp_month_day(
-        This(this): This<chrono::DateTime<chrono::FixedOffset>>,
-    ) -> Result<Value> {
+    pub fn timestamp_month_day(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         Ok((this.day0() as i32).into())
     }
 
-    pub fn timestamp_date(
-        This(this): This<chrono::DateTime<chrono::FixedOffset>>,
-    ) -> Result<Value> {
+    pub fn timestamp_date(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         Ok((this.day() as i32).into())
     }
 
-    pub fn timestamp_weekday(
-        This(this): This<chrono::DateTime<chrono::FixedOffset>>,
-    ) -> Result<Value> {
+    pub fn timestamp_weekday(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         Ok((this.weekday().num_days_from_sunday() as i32).into())
     }
 
-    pub fn timestamp_hours(
-        This(this): This<chrono::DateTime<chrono::FixedOffset>>,
-    ) -> Result<Value> {
+    pub fn timestamp_hours(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         Ok((this.hour() as i32).into())
     }
 
-    pub fn timestamp_minutes(
-        This(this): This<chrono::DateTime<chrono::FixedOffset>>,
-    ) -> Result<Value> {
+    pub fn timestamp_minutes(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         Ok((this.minute() as i32).into())
     }
 
-    pub fn timestamp_seconds(
-        This(this): This<chrono::DateTime<chrono::FixedOffset>>,
-    ) -> Result<Value> {
+    pub fn timestamp_seconds(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         Ok((this.second() as i32).into())
     }
 
-    pub fn timestamp_millis(
-        This(this): This<chrono::DateTime<chrono::FixedOffset>>,
-    ) -> Result<Value> {
+    pub fn timestamp_millis(This(this): This<chrono::DateTime<chrono::Utc>>) -> Result<Value> {
         Ok((this.timestamp_subsec_millis() as i32).into())
     }
 }
@@ -722,7 +702,6 @@ mod tests {
         .for_each(assert_script);
     }
 
-    #[cfg(feature = "chrono")]
     #[test]
     fn test_timestamp() {
         [(
@@ -795,7 +774,6 @@ mod tests {
         .for_each(assert_script);
     }
 
-    #[cfg(feature = "chrono")]
     #[test]
     fn test_duration() {
         [
@@ -817,12 +795,13 @@ mod tests {
         .for_each(assert_script);
     }
 
-    #[cfg(feature = "chrono")]
     #[test]
     fn test_timestamp_variable() {
         let mut context = Context::default();
-        let ts: chrono::DateTime<chrono::FixedOffset> =
-            chrono::DateTime::parse_from_rfc3339("2023-05-29T00:00:00Z").unwrap();
+        let ts: chrono::DateTime<chrono::Utc> =
+            chrono::DateTime::parse_from_rfc3339("2023-05-29T00:00:00Z")
+                .map(|e| e.with_timezone(&chrono::Utc))
+                .unwrap();
         context
             .add_variable("ts", crate::Value::Timestamp(ts))
             .unwrap();
@@ -832,7 +811,6 @@ mod tests {
         assert_eq!(result, true.into());
     }
 
-    #[cfg(feature = "chrono")]
     #[test]
     fn test_chrono_string() {
         [

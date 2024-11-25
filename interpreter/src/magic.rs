@@ -13,10 +13,9 @@ impl_conversions!(
     Vec<Value> => Value::List
 );
 
-#[cfg(feature = "chrono")]
 impl_conversions!(
     chrono::Duration => Value::Duration,
-    chrono::DateTime<chrono::FixedOffset> => Value::Timestamp,
+    chrono::DateTime<chrono::Utc> => Value::Timestamp,
 );
 
 /// Describes any type that can be converted from a [`Value`] into itself.
