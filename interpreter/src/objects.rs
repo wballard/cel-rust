@@ -216,6 +216,60 @@ impl Value {
     }
 }
 
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::List(v) => {
+                write!(f, "[")?;
+                for (i, v) in v.list.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", v)?;
+                }
+                write!(f, "]")
+            }
+            Value::Map(v) => {
+                write!(f, "{{")?;
+                for (i, (k, v)) in v.map.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", k, v)?;
+                }
+                write!(f, "}}")
+            }
+            Value::Function(name, target) => match target {
+                Some(target) => write!(f, "{}.{}", target, name),
+                None => write!(f, "{}", name),
+            },
+            Value::Number(v) => write!(f, "{}", v),
+            Value::String(v) => write!(f, "{}", v),
+            Value::Bytes(v) => {
+                let mut buf = String::new();
+                CUSTOM_ENGINE.encode_string(v, &mut buf);
+                write!(f, "{}", buf)
+            }
+            Value::Bool(v) => write!(f, "{}", v),
+            Value::Null => write!(f, "null"),
+            Value::Duration(v) => write!(f, "{}", v),
+            Value::Timestamp(v) => write!(f, "{}", v),
+            Value::Ulid(v) => write!(f, "{}", v),
+            Value::Tag(v) => write!(f, "{}", v),
+            Value::TagSet(v) => {
+                write!(f, "{{#")?;
+                for (i, v) in v.set.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", v)?;
+                }
+                write!(f, "}}#")
+            }
+        }
+    }
+}
+
 impl From<&Value> for Value {
     fn from(value: &Value) -> Self {
         value.clone()
