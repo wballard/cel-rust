@@ -3,6 +3,7 @@ use crate::functions::FunctionContext;
 use crate::ExecutionError;
 use base64;
 use cel_parser::ast::*;
+use chrono::SecondsFormat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -253,7 +254,7 @@ impl Display for Value {
             Value::Bool(v) => write!(f, "{}", v),
             Value::Null => write!(f, "null"),
             Value::Duration(v) => write!(f, "{}", v),
-            Value::Timestamp(v) => write!(f, "{}", v),
+            Value::Timestamp(v) => write!(f, "{}", v.to_rfc3339_opts(SecondsFormat::Millis, true)),
             Value::Ulid(v) => write!(f, "{}", v),
             Value::Tag(v) => write!(f, "{}", v),
             Value::TagSet(v) => {

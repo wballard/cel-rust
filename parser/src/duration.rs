@@ -19,7 +19,7 @@ const MICROSECOND: u64 = 1_000;
 /// Sign           -> '-'
 /// Number         -> Digit+ ('.' Digit+)?
 /// Digit          -> '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
-/// Unit           -> 'h' | 'm' | 's' | 'ms' | 'us' | 'ns'
+/// Unit           -> 'd' | 'h' | 'm' | 's' | 'ms' | 'us' | 'ns'
 /// String         -> DurationString
 ///
 /// # Examples
@@ -48,6 +48,7 @@ enum Unit {
     Second,
     Minute,
     Hour,
+    Day,
 }
 
 impl Unit {
@@ -59,6 +60,7 @@ impl Unit {
             Unit::Second => 1_000_000_000,
             Unit::Minute => 60 * 1_000_000_000,
             Unit::Hour => 60 * 60 * 1_000_000_000,
+            Unit::Day => 24 * 60 * 60 * 1_000_000_000,
         }
     }
 }
@@ -83,6 +85,7 @@ fn parse_unit(i: &str) -> IResult<&str, Unit> {
         map(char('h'), |_| Unit::Hour),
         map(char('m'), |_| Unit::Minute),
         map(char('s'), |_| Unit::Second),
+        map(char('d'), |_| Unit::Day),
     ))(i)
 }
 
@@ -247,6 +250,7 @@ mod tests {
     }
 
     assert_durations! {
+        "1d" => Duration::days(1),
         "1s" => Duration::seconds(1),
         "-1s" => Duration::seconds(-1),
         "1.1s" => Duration::seconds(1) + Duration::milliseconds(100),
