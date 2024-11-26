@@ -5,7 +5,7 @@ use nom::character::complete::char;
 use nom::combinator::{map, opt};
 use nom::multi::many1;
 use nom::number::complete::double;
-use nom::IResult;
+use nom::{IResult, Parser};
 
 // Constants representing time units in nanoseconds
 const SECOND: u64 = 1_000_000_000;
@@ -32,11 +32,12 @@ const MICROSECOND: u64 = 1_000;
 /// - `1ns` parses as 1 nanosecond
 /// - `1.5ns` parses as 1 nanosecond (sub-nanosecond durations not supported)
 pub fn parse_duration(i: &str) -> IResult<&str, Duration> {
-    let (i, neg) = opt(parse_negative)(i)?;
+    let (i, neg) = opt(parse_negative).parse(i)?;
     if i == "0" {
         return Ok((i, Duration::zero()));
     }
-    let (i, duration) = many1(parse_number_unit)(i)
+    let (i, duration) = many1(parse_number_unit)
+        .parse(i)
         .map(|(i, d)| (i, d.iter().fold(Duration::zero(), |acc, next| acc + *next)))?;
     Ok((i, duration * if neg.is_some() { -1 } else { 1 }))
 }
@@ -86,7 +87,8 @@ fn parse_unit(i: &str) -> IResult<&str, Unit> {
         map(char('m'), |_| Unit::Minute),
         map(char('s'), |_| Unit::Second),
         map(char('d'), |_| Unit::Day),
-    ))(i)
+    ))
+    .parse(i)
 }
 
 fn to_duration(num: f64, unit: Unit) -> Duration {
