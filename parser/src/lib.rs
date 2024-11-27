@@ -14,6 +14,9 @@ pub use duration::*;
 
 pub mod string;
 
+pub mod numbers;
+pub use numbers::*;
+
 lalrpop_mod!(#[allow(clippy::all)] pub parser, "/cel.rs");
 
 /// Parses a CEL expression and returns it.

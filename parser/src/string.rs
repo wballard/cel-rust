@@ -1,9 +1,5 @@
 use chumsky::prelude::*;
 
-// parser combinators are constructed from the bottom up:
-// first we write parsers for the smallest elements (escaped characters),
-// then combine them into larger parsers.
-
 /// Parse the provided quoted string.
 /// This function was adopted from [snailquote](https://docs.rs/snailquote/latest/snailquote/).
 ///
@@ -38,6 +34,24 @@ use chumsky::prelude::*;
 /// | \UDDDDDDDD | 0xDDDDDDDD | Unicode character with hex code DDDDDDDD |
 /// | \DDD       | 0DDD       | Unicode character with octal code DDD    |
 ///
+/// # Example
+///
+/// ```
+/// use cel_parser::string::parse_string;
+/// use chumsky::Parser;
+///
+/// let parsed = parse_string().parse("\"Hello \\n World\"").unwrap();
+/// assert_eq!(parsed, "Hello \n World");
+///
+/// let parsed = parse_string().parse("'Hello \\t World'").unwrap();
+/// assert_eq!(parsed, "Hello \t World");
+///
+/// let parsed = parse_string().parse("r\"Hello \\n World\"").unwrap();
+/// assert_eq!(parsed, "Hello \\n World");
+///
+/// let parsed = parse_string().parse("R'Hello \\t World'").unwrap();
+/// assert_eq!(parsed, "Hello \\t World");
+/// ```
 pub fn parse_string<'a>() -> impl Parser<'a, &'a str, String, extra::Err<Rich<'a, char>>> {
     choice((
         parse_single_quoted(),
