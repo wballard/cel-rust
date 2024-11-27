@@ -19,6 +19,8 @@ pub use numbers::*;
 
 pub mod datetime;
 
+pub mod identifiers;
+
 lalrpop_mod!(#[allow(clippy::all)] pub parser, "/cel.rs");
 
 /// Parses a CEL expression and returns it.
