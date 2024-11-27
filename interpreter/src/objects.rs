@@ -37,6 +37,14 @@ impl From<Vec<Value>> for ValueSet {
     }
 }
 
+impl From<Vec<cel_parser::identifiers::HashTag>> for ValueSet {
+    fn from(list: Vec<cel_parser::identifiers::HashTag>) -> Self {
+        ValueSet {
+            set: list.into_iter().map(Value::HashTag).collect(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Hash, PartialOrd, Ord, Eq)]
 pub struct ValueMap {
     pub map: BTreeMap<Key, Value>,
@@ -148,7 +156,7 @@ pub enum Value {
     Timestamp(chrono::DateTime<chrono::Utc>),
     Null,
     Ulid(ulid::Ulid),
-    Tag(String),
+    HashTag(cel_parser::identifiers::HashTag),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -204,7 +212,7 @@ impl Value {
             Value::Timestamp(_) => ValueType::Timestamp,
             Value::Null => ValueType::Null,
             Value::Ulid(_) => ValueType::Ulid,
-            Value::Tag(_) => ValueType::Tag,
+            Value::HashTag(_) => ValueType::Tag,
             Value::TagSet(_) => ValueType::TagSet,
         }
     }
@@ -256,7 +264,7 @@ impl Display for Value {
             Value::Duration(v) => write!(f, "{}", v),
             Value::Timestamp(v) => write!(f, "{}", v.to_rfc3339_opts(SecondsFormat::Millis, true)),
             Value::Ulid(v) => write!(f, "{}", v),
-            Value::Tag(v) => write!(f, "{}", v),
+            Value::HashTag(v) => write!(f, "{}", v),
             Value::TagSet(v) => {
                 write!(f, "{{#")?;
                 for (i, v) in v.set.iter().enumerate() {
@@ -341,7 +349,7 @@ impl PartialEq for Value {
 
             (Value::Timestamp(a), Value::Timestamp(b)) => a == b,
             (Value::Ulid(a), Value::Ulid(b)) => a == b,
-            (Value::Tag(a), Value::Tag(b)) => a == b,
+            (Value::HashTag(a), Value::HashTag(b)) => a == b,
             (Value::TagSet(a), Value::TagSet(b)) => a == b,
             (_, _) => false,
         }
@@ -369,7 +377,7 @@ impl std::hash::Hash for Value {
 
             Value::Timestamp(v) => v.hash(state),
             Value::Ulid(v) => v.hash(state),
-            Value::Tag(v) => v.hash(state),
+            Value::HashTag(v) => v.hash(state),
             Value::TagSet(v) => v.hash(state),
         }
     }
@@ -385,7 +393,7 @@ impl Ord for Value {
             (Value::Duration(a), Value::Duration(b)) => a.cmp(b),
             (Value::Timestamp(a), Value::Timestamp(b)) => a.cmp(b),
             (Value::Ulid(a), Value::Ulid(b)) => a.cmp(b),
-            (Value::Tag(a), Value::Tag(b)) => a.cmp(b),
+            (Value::HashTag(a), Value::HashTag(b)) => a.cmp(b),
             _ => Ordering::Equal,
         }
     }
@@ -641,7 +649,11 @@ impl<'a> Value {
                 let list: Vec<_> = items
                     .iter()
                     .flat_map(|i| Value::resolve(i, ctx))
-                    .map(|v| Value::Tag(v.into()))
+                    .filter_map(|v| match v {
+                        Value::HashTag(v) => Some(v),
+                        Value::String(v) => Some(v.as_str().into()),
+                        _ => None,
+                    })
                     .collect();
                 Value::TagSet(list.into()).into()
             }
@@ -774,7 +786,7 @@ impl<'a> Value {
             Value::Timestamp(v) => v.timestamp_nanos_opt().unwrap_or_default() > 0,
             Value::Function(_, _) => false,
             Value::Ulid(_) => true,
-            Value::Tag(_) => true,
+            Value::HashTag(_) => true,
         }
     }
 }
@@ -791,7 +803,7 @@ impl From<&Atom> for Value {
             Atom::Ulid(v) => Value::Ulid(*v),
             Atom::DateTime(v) => Value::Timestamp(*v),
             Atom::Duration(v) => Value::Duration(*v),
-            Atom::Tag(v) => Value::String(v.clone()),
+            Atom::HashTag(v) => Value::HashTag(v.clone()),
         }
     }
 }
@@ -1156,9 +1168,9 @@ mod tests {
             result.unwrap(),
             Value::TagSet(
                 vec![
-                    Value::Tag("1".to_string()),
-                    Value::Tag("2".to_string()),
-                    Value::Tag("3".to_string())
+                    Value::HashTag("1".into()),
+                    Value::HashTag("2".into()),
+                    Value::HashTag("3".into())
                 ]
                 .into()
             )
@@ -1167,16 +1179,16 @@ mod tests {
 
     #[test]
     fn tag_set_expression() {
-        let program = Program::compile("{# #1, #2, 'thr' + 'ee' #}").unwrap();
+        let program = Program::compile("{# #one, #two, 'thr' + 'ee' #}").unwrap();
         let context = Context::default();
         let result = program.execute(&context);
         assert_eq!(
             result.unwrap(),
             Value::TagSet(
                 vec![
-                    Value::Tag("1".to_string()),
-                    Value::Tag("2".to_string()),
-                    Value::Tag("three".to_string())
+                    Value::HashTag("one".into()),
+                    Value::HashTag("two".into()),
+                    Value::HashTag("three".into())
                 ]
                 .into()
             )

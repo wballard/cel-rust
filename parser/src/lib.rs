@@ -23,6 +23,8 @@ pub mod identifiers;
 
 pub mod units;
 
+pub mod operators;
+
 lalrpop_mod!(#[allow(clippy::all)] pub parser, "/cel.rs");
 
 /// Parses a CEL expression and returns it.
@@ -625,21 +627,21 @@ mod tests {
 
     #[test]
     fn test_tag() {
-        assert_parse_eq("#foo:bar", Atom(Tag("foo:bar".to_string())))
+        assert_parse_eq("#foobar", Atom(HashTag("foobar".into())))
     }
 
     #[test]
     fn test_tag_space() {
-        assert_parse_eq("#foo bar", Atom(Tag("foo bar".to_string())))
+        assert_parse_eq("#foo_bar", Atom(HashTag("foo_bar".into())))
     }
 
     #[test]
     fn test_tag_set() {
         assert_parse_eq(
-            "{# #foo bar, #💕 #}",
+            "{# #foo_bar, #💕 #}",
             TagSet(vec![
-                Atom(Tag("foo bar".to_string())),
-                Atom(Tag("💕".to_string())),
+                Atom(HashTag("foo_bar".into())),
+                Atom(HashTag("💕".into())),
             ]),
         )
     }

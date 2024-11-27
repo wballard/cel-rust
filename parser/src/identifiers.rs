@@ -78,9 +78,7 @@ impl fmt::Display for HashTag {
 /// ```
 ///
 pub fn parse_hashtag<'a>() -> impl Parser<'a, &'a str, HashTag, extra::Err<Rich<'a, char>>> {
-    just("#")
-        .ignore_then(parse_identifier())
-        .map(|s| s.into())
+    just("#").ignore_then(parse_identifier()).map(|s| s.into())
 }
 
 /// Parses the constant idenfitiers for `true` and `false`.
@@ -136,10 +134,15 @@ impl fmt::Display for Identifier {
 /// let identifier_without_emoji = parse_identifier().parse("rust_lang").unwrap();
 /// assert_eq!(identifier_without_emoji, "rust_lang".into());
 ///
+/// let identifier_is_emoji = parse_identifier().parse("🦃").unwrap();
+/// assert_eq!(identifier_is_emoji, "🦃".into());
+///
 /// assert_eq!(identifier_with_emoji.to_string(), "rust_🦀");
 /// assert_eq!(identifier_without_emoji.to_string(), "rust_lang");
+/// assert_eq!(identifier_is_emoji.to_string(), "🦃");
 /// ```
+///
 pub fn parse_identifier<'a>() -> impl Parser<'a, &'a str, Identifier, extra::Err<Rich<'a, char>>> {
-    let body_pattern = r"\p{XID_Start}[\p{XID_Continue}\p{Emoji}]*";
+    let body_pattern = r"[\p{XID_Start}\p{Emoji}][\p{XID_Continue}\p{Emoji}]*";
     regex(body_pattern).map(|s: &str| s.into())
 }

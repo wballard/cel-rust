@@ -2,6 +2,10 @@ use std::iter::Enumerate;
 use std::num::ParseIntError;
 use std::str::Chars;
 
+use chumsky::prelude::*;
+
+use crate::identifiers::{parse_hashtag, HashTag};
+
 /// Error type of [unescape](unescape).
 #[derive(Debug, PartialEq)]
 pub enum ParseSequenceError {
@@ -417,9 +421,9 @@ pub fn parse_date_time_zone(s: &str) -> chrono::DateTime<chrono::Utc> {
     date.into()
 }
 
-pub fn parse_tag(s: &str) -> String {
+pub fn parse_tag(s: &str) -> HashTag {
     // skip the first character which is a #
-    s[1..].trim().to_string()
+    parse_hashtag().parse(s).unwrap()
 }
 
 #[cfg(test)]

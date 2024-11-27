@@ -1,3 +1,4 @@
+use crate::identifiers::*;
 use std::collections::HashSet;
 
 /// Represents a relational operator in an expression.
@@ -68,7 +69,7 @@ pub enum Atom {
     Ulid(ulid::Ulid),
     DateTime(chrono::DateTime<chrono::Utc>),
     Duration(chrono::Duration),
-    Tag(String),
+    HashTag(HashTag),
 }
 
 impl From<ulid::Ulid> for Atom {
@@ -92,6 +93,30 @@ impl From<chrono::DateTime<chrono::Utc>> for Atom {
 impl From<chrono::Duration> for Atom {
     fn from(duration: chrono::Duration) -> Self {
         Atom::Duration(duration)
+    }
+}
+
+impl From<bool> for Atom {
+    fn from(b: bool) -> Self {
+        Atom::Bool(b)
+    }
+}
+
+impl From<String> for Atom {
+    fn from(s: String) -> Self {
+        Atom::String(s)
+    }
+}
+
+impl From<&str> for Atom {
+    fn from(s: &str) -> Self {
+        Atom::String(s.to_string())
+    }
+}
+
+impl From<HashTag> for Atom {
+    fn from(tag: HashTag) -> Self {
+        Atom::HashTag(tag)
     }
 }
 

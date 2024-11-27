@@ -23,7 +23,7 @@ match {
     r"([-+]?[0-9]*\.[0-9]+([eE][-+]?[0-9]+))" => SCIENTIFIC_DECIMAL,
     r"[-+]?[0-9]+[eE][-+]?[0-9]+" => SCIENTIFIC
 } else {
-    r#"#[^\[\]\(\)\{\},'"-#]+"# => TAG,
+    r#"#[^\[\]\(\)\{\},'"-# ]+"# => TAG,
     _
 }
 
@@ -193,7 +193,7 @@ Atom: Atom = {
         Atom::Duration(duration)
     },
 
-    TAG => Atom::Tag(parse_tag(<>))
+    TAG => Atom::HashTag(parse_tag(<>))
 };
 
 Ident: String = {

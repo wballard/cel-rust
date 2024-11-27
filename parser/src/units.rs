@@ -1,14 +1,22 @@
 use super::identifiers::*;
 use super::numbers::*;
 use chumsky::prelude::*;
-use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 use std::fmt;
+use std::sync::Arc;
 
 /// A unit of measurement.
 ///
 /// These can be any identifier you like.
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone)]
 pub struct Unit(Identifier);
+
+impl Unit {
+    /// Creates a new unit from a string.
+    pub fn of<S: Into<Identifier>>(s: S) -> Self {
+        Unit(s.into())
+    }
+}
 
 impl From<Identifier> for Unit {
     fn from(identifier: Identifier) -> Self {
@@ -71,4 +79,79 @@ pub fn parse_measure<'a>() -> impl Parser<'a, &'a str, Measure, extra::Err<Rich<
             number,
             unit: identifier.into(),
         })
+}
+
+/// Time units for durations.
+enum TimeUnit {
+    Nanosecond,
+    Microsecond,
+    Millisecond,
+    Second,
+    Minute,
+    Hour,
+    Day,
+}
+
+impl TimeUnit {
+    /// Returns the number of nanoseconds in a single unit of time.
+    fn nanos(&self) -> i64 {
+        match self {
+            TimeUnit::Nanosecond => 1,
+            TimeUnit::Microsecond => 1_000,
+            TimeUnit::Millisecond => 1_000_000,
+            TimeUnit::Second => 1_000_000_000,
+            TimeUnit::Minute => 60 * 1_000_000_000,
+            TimeUnit::Hour => 60 * 60 * 1_000_000_000,
+            TimeUnit::Day => 24 * 60 * 60 * 1_000_000_000,
+        }
+    }
+}
+
+/// Parses a `chrono::Duration` from a string.
+///
+/// Example:
+///
+/// ```
+/// use chumsky::Parser;
+/// use chrono::{Duration, Utc};
+/// use cel_parser::units::parse_duration;
+///
+/// let duration_str = "10s";
+/// let parsed_duration = parse_duration().parse(duration_str).unwrap();
+/// assert_eq!(parsed_duration, Duration::seconds(10));
+///
+/// let now = Utc::now();
+/// let future = now + parsed_duration;
+/// let difference = future - now;
+/// assert_eq!(difference, Duration::seconds(10));
+/// ```
+pub fn parse_duration<'a>() -> impl Parser<'a, &'a str, chrono::Duration, extra::Err<Rich<'a, char>>>
+{
+    // this is a bit funky, chaining parsers together
+    Arc::new(
+        parse_measure()
+            .map(|measure| {
+                let stringy = measure.unit.to_string();
+                let time = match stringy.as_str() {
+                    "ns" => Ok(TimeUnit::Nanosecond),
+                    "us" => Ok(TimeUnit::Microsecond),
+                    "ms" => Ok(TimeUnit::Millisecond),
+                    "s" => Ok(TimeUnit::Second),
+                    "m" => Ok(TimeUnit::Minute),
+                    "h" => Ok(TimeUnit::Hour),
+                    "d" => Ok(TimeUnit::Day),
+                    _ => Err("unknown unit"),
+                };
+                match time {
+                    Ok(unit) => Ok(chrono::Duration::nanoseconds(
+                        (measure.number * Decimal::from(unit.nanos()))
+                            .to_i64()
+                            .unwrap(),
+                    )),
+                    Err(_) => Err("unknown unit"),
+                }
+            })
+            .filter(|unit| unit.is_ok()),
+    )
+    .map(|unit| unit.unwrap())
 }
