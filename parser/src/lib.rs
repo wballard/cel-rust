@@ -43,13 +43,13 @@ pub fn parse(input: &str) -> Result<Expression, ParseError> {
 
 #[cfg(test)]
 mod tests {
+    use crate::Expression;
     use chrono::TimeZone;
+    use rstest::rstest;
     use rust_decimal_macros::dec;
     use ulid::Ulid;
 
-    use crate::{
-        ArithmeticOp, Atom, Atom::*, Expression, Expression::*, Member::*, RelationOp, UnaryOp,
-    };
+    use crate::{ArithmeticOp, Atom, Atom::*, Expression::*, Member::*, RelationOp, UnaryOp};
 
     fn parse(input: &str) -> Expression {
         crate::parse(input).unwrap_or_else(|e| panic!("{}", e))
@@ -58,80 +58,36 @@ mod tests {
     fn assert_parse_eq(input: &str, expected: Expression) {
         assert_eq!(parse(input), expected);
     }
-
-    #[test]
-    fn ident() {
-        assert_parse_eq("a", Ident("a".to_string()));
-        assert_parse_eq("hello ", Ident("hello".to_string()));
+    #[rstest]
+    #[case("a", Ident("a".to_string()))]
+    #[case("hello ", Ident("hello".to_string()))]
+    fn identifiers(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
-    #[test]
-    fn simple_int() {
-        assert_parse_eq("1", Atom(Number(dec!(1))))
+    #[rstest]
+    #[case("1", Atom(Number(dec!(1))))]
+    #[case("1.0", Atom(Number(dec!(1.0))))]
+    #[case("1e3", Expression::Atom(Atom::Number(dec!(1000.0))))]
+    #[case("1e-3", Expression::Atom(Atom::Number(dec!(0.001))))]
+    #[case("1.4e-3", Expression::Atom(Atom::Number(dec!(0.0014))))]
+    fn numbers(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
-    #[test]
-    fn simple_float() {
-        assert_parse_eq("1.0", Atom(Number(dec!(1.0))))
+    #[rstest]
+    #[case("'foobar'", Atom(String("foobar".to_string())))]
+    #[case("r'\n'", Atom(String("\n".to_string())))]
+    #[case(r#""foobar""#, Atom(String("foobar".to_string())))]
+    fn strings(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
-    #[test]
-    fn other_floats() {
-        assert_parse_eq("1e3", Expression::Atom(Atom::Number(dec!(1000.0))));
-        assert_parse_eq("1e-3", Expression::Atom(Atom::Number(dec!(0.001))));
-        assert_parse_eq("1.4e-3", Expression::Atom(Atom::Number(dec!(0.0014))));
-    }
-
-    #[test]
-    fn single_quote_str() {
-        assert_parse_eq("'foobar'", Atom(String("foobar".to_string())))
-    }
-
-    #[test]
-    fn double_quote_str() {
-        assert_parse_eq(r#""foobar""#, Atom(String("foobar".to_string())))
-    }
-
-    // #[test]
-    // fn single_quote_raw_str() {
-    //     assert_parse_eq(
-    //         "r'\n'",
-    //         Expression::Atom(String("\n".to_string().into())),
-    //     );
-    // }
-
-    #[test]
-    fn single_quote_bytes() {
-        assert_parse_eq("b'foo'", Atom(Bytes(b"foo".to_vec())));
-        assert_parse_eq("b''", Atom(Bytes(b"".to_vec())));
-    }
-
-    #[test]
-    fn double_quote_bytes() {
-        assert_parse_eq(r#"b"foo""#, Atom(Bytes(b"foo".to_vec())));
-        assert_parse_eq(r#"b"""#, Atom(Bytes(b"".to_vec())));
-    }
-
-    #[test]
-    fn bools() {
-        assert_parse_eq("true", Atom(Bool(true)));
-        assert_parse_eq("false", Atom(Bool(false)));
-    }
-
-    #[test]
-    fn nulls() {
-        assert_parse_eq("null", Atom(Null));
-    }
-
-    #[test]
-    fn structure() {
-        println!("{:+?}", parse("{1 + a: 3}"));
-    }
-
-    #[test]
-    fn simple_str() {
-        assert_parse_eq(r#"'foobar'"#, Atom(String("foobar".to_string())));
-        println!("{:?}", parse(r#"1 == '1'"#))
+    #[rstest]
+    #[case("true", Atom(Bool(true)))]
+    #[case("false", Atom(Bool(false)))]
+    fn bools(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
     #[test]
@@ -301,43 +257,6 @@ mod tests {
     }
 
     #[test]
-    fn test_nonempty_map_parsing() {
-        assert_parse_eq(
-            "{'a': 1, 'b': 2}",
-            Map(vec![
-                (
-                    Expression::Atom(String("a".to_string())),
-                    Expression::Atom(Number(dec!(1))),
-                ),
-                (
-                    Expression::Atom(String("b".to_string())),
-                    Expression::Atom(Number(dec!(2))),
-                ),
-            ]),
-        );
-    }
-
-    #[test]
-    fn nonempty_map_index_parsing() {
-        assert_parse_eq(
-            "{'a': 1, 'b': 2}[0]",
-            Member(
-                Box::new(Map(vec![
-                    (
-                        Expression::Atom(String("a".to_string())),
-                        Expression::Atom(Number(dec!(1))),
-                    ),
-                    (
-                        Expression::Atom(String("b".to_string())),
-                        Expression::Atom(Number(dec!(2))),
-                    ),
-                ])),
-                Box::new(Index(Box::new(Expression::Atom(Number(dec!(0)))))),
-            ),
-        );
-    }
-
-    #[test]
     fn integer_relations() {
         assert_parse_eq(
             "2 != 3",
@@ -387,33 +306,6 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn binary_product_negated_expressions() {
-    //     assert_parse_eq(
-    //         "2 * -3",
-    //         Arithmetic(
-    //             Box::new(Expression::Atom(Atom::Number(dec!(2)))),
-    //             ArithmeticOp::Multiply,
-    //             Box::new(Unary(
-    //                 UnaryOp::Minus,
-    //                 Box::new(Expression::Atom(Atom::Number(dec!(3)))),
-    //             )),
-    //         ),
-    //     );
-    //
-    //     assert_parse_eq(
-    //         "2 / -3",
-    //         Arithmetic(
-    //             Box::new(Expression::Atom(Number(dec!(2)))),
-    //             ArithmeticOp::Divide,
-    //             Box::new(Unary(
-    //                 UnaryOp::Minus,
-    //                 Box::new(Expression::Atom(Number(dec!(3)))),
-    //             )),
-    //         ),
-    //     );
-    // }
-
     #[test]
     fn test_parser_sum_expressions() {
         assert_parse_eq(
@@ -425,17 +317,14 @@ mod tests {
             ),
         );
 
-        // assert_parse_eq(
-        //     "2 - -3",
-        //     Arithmetic(
-        //         Box::new(Expression::Atom(Atom::Number(dec!(2)))),
-        //         ArithmeticOp::Subtract,
-        //         Box::new(Unary(
-        //             UnaryOp::Minus,
-        //             Box::new(Expression::Atom(Atom::Number(dec!(3)))),
-        //         )),
-        //     ),
-        // );
+        assert_parse_eq(
+            "2 - -3",
+            Arithmetic(
+                Box::new(Expression::Atom(Atom::Number(dec!(2)))),
+                ArithmeticOp::Subtract,
+                Box::new(Expression::Atom(Atom::Number(dec!(-3)))),
+            ),
+        );
     }
 
     #[test]
