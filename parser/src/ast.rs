@@ -63,7 +63,6 @@ pub enum Member {
 pub enum Atom {
     Number(rust_decimal::Decimal),
     String(String),
-    Bytes(Vec<u8>),
     Bool(bool),
     Null,
     Ulid(ulid::Ulid),

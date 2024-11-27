@@ -797,7 +797,6 @@ impl From<&Atom> for Value {
         match atom {
             Atom::Number(v) => Value::Number(*v),
             Atom::String(v) => Value::String(v.clone()),
-            Atom::Bytes(v) => Value::Bytes(v.clone()),
             Atom::Bool(v) => Value::Bool(*v),
             Atom::Null => Value::Null,
             Atom::Ulid(v) => Value::Ulid(*v),

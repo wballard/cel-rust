@@ -538,7 +538,6 @@ mod tests {
             ("size of list", "size([1, 2, 3]) == 3"),
             ("size of map", "size({'a': 1, 'b': 2, 'c': 3}) == 3"),
             ("size of string", "size('foo') == 3"),
-            ("size of bytes", "size(b'foo') == 3"),
             ("size as a list method", "[1, 2, 3].size() == 3"),
             ("size as a string method", "'foobar'.size() == 6"),
         ]
@@ -761,7 +760,6 @@ mod tests {
             ("list", "[1, 2, 3].contains(3) == true"),
             ("map", "{1: true, 2: true, 3: true}.contains(3) == true"),
             ("string", "'foobar'.contains('bar') == true"),
-            ("bytes", "b'foobar'.contains(b'o') == true"),
         ];
 
         for (name, script) in tests {
@@ -810,7 +808,6 @@ mod tests {
             ("string", "'foo'.string() == 'foo'"),
             ("int", "10.string() == '10'"),
             ("float", "10.5.string() == '10.5'"),
-            ("bytes", "b'foo'.string() == 'foo'"),
         ]
         .iter()
         .for_each(assert_script);

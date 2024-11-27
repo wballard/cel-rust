@@ -1,4 +1,4 @@
-use crate::{RelationOp, ArithmeticOp, Expression, UnaryOp, Member, Atom, parse_bytes, parse_string, parse_date, parse_date_time, parse_date_time_zone, parse_duration, parse_tag};
+use crate::{RelationOp, ArithmeticOp, Expression, UnaryOp, Member, Atom, parse_string, parse_date, parse_date_time, parse_date_time_zone, parse_duration, parse_tag};
 use std::str::FromStr;
 use ulid::Ulid;
 use rust_decimal::Decimal;
@@ -166,12 +166,6 @@ Atom: Atom = {
     // Uses similar regex as above, but replace double quote with a single one
     r#"'([^'\\]*(?:\\.[^'\\]*)*)'"# => Atom::String(parse_string(<>).unwrap().into()),
     r#"[rR]'([^'\\]*(?:\\.[^'\\]*)*)'"# => Atom::String(parse_string(<>).unwrap().into()),
-
-    // Double quoted bytes
-    r#"[bB]"(\\.|[^"\n])*""# => Atom::Bytes(parse_bytes(&<>[2..<>.len()-1]).unwrap().into()),
-
-    // Single quoted bytes
-    r#"[bB]'(\\.|[^'\n])*'"# => Atom::Bytes(parse_bytes(&<>[2..<>.len()-1]).unwrap().into()),
 
     "true" => Atom::Bool(true),
     "false" => Atom::Bool(false),
