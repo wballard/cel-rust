@@ -3,7 +3,6 @@ use super::numbers::*;
 use chumsky::prelude::*;
 use rust_decimal::prelude::*;
 use std::fmt;
-use std::sync::Arc;
 
 /// A unit of measurement.
 ///
@@ -74,7 +73,7 @@ impl fmt::Display for Measure {
 /// ```
 pub fn parse_measure<'a>() -> impl Parser<'a, &'a str, Measure, extra::Err<Rich<'a, char>>> {
     parse_number()
-        .then(parse_identifier())
+        .then(parse_non_numeric_identifier())
         .map(|(number, identifier)| Measure {
             number,
             unit: identifier.into(),
@@ -124,34 +123,43 @@ impl TimeUnit {
 /// let future = now + parsed_duration;
 /// let difference = future - now;
 /// assert_eq!(difference, Duration::seconds(10));
+///
+/// // and compund durations
+/// let compound = "1m10s";
+/// let parsed_compound = parse_duration().parse(compound).unwrap();
+/// assert_eq!(parsed_compound, Duration::minutes(1) +  Duration::seconds(10));
 /// ```
 pub fn parse_duration<'a>() -> impl Parser<'a, &'a str, chrono::Duration, extra::Err<Rich<'a, char>>>
 {
     // this is a bit funky, chaining parsers together
-    Arc::new(
-        parse_measure()
-            .map(|measure| {
-                let stringy = measure.unit.to_string();
-                let time = match stringy.as_str() {
-                    "ns" => Ok(TimeUnit::Nanosecond),
-                    "us" => Ok(TimeUnit::Microsecond),
-                    "ms" => Ok(TimeUnit::Millisecond),
-                    "s" => Ok(TimeUnit::Second),
-                    "m" => Ok(TimeUnit::Minute),
-                    "h" => Ok(TimeUnit::Hour),
-                    "d" => Ok(TimeUnit::Day),
-                    _ => Err("unknown unit"),
-                };
-                match time {
-                    Ok(unit) => Ok(chrono::Duration::nanoseconds(
-                        (measure.number * Decimal::from(unit.nanos()))
-                            .to_i64()
-                            .unwrap(),
-                    )),
-                    Err(_) => Err("unknown unit"),
-                }
-            })
-            .filter(|unit| unit.is_ok()),
-    )
-    .map(|unit| unit.unwrap())
+    parse_measure()
+        .repeated()
+        .at_least(1)
+        .collect()
+        .map(|measures: Vec<Measure>| {
+            measures
+                .into_iter()
+                .flat_map(|measure| {
+                    let time = match measure.unit.0.to_string().as_str() {
+                        "ns" => Ok(TimeUnit::Nanosecond),
+                        "us" => Ok(TimeUnit::Microsecond),
+                        "ms" => Ok(TimeUnit::Millisecond),
+                        "s" => Ok(TimeUnit::Second),
+                        "m" => Ok(TimeUnit::Minute),
+                        "h" => Ok(TimeUnit::Hour),
+                        "d" => Ok(TimeUnit::Day),
+                        _ => Err("unknown unit"),
+                    };
+                    match time {
+                        Ok(unit) => Ok(chrono::Duration::nanoseconds(
+                            (measure.number * Decimal::from(unit.nanos()))
+                                .to_i64()
+                                .unwrap(),
+                        )),
+                        Err(_) => Err("unknown unit"),
+                    }
+                })
+                .fold(chrono::Duration::nanoseconds(0), |acc, x| acc + x)
+        })
+        .map(|unit| unit)
 }
