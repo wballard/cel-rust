@@ -751,7 +751,6 @@ impl ops::Rem<Value> for Value {
 #[cfg(test)]
 mod tests {
     use crate::*;
-    use std::collections::HashMap;
 
     #[test]
     fn test_heterogeneous_compare() {

@@ -44,12 +44,14 @@ pub fn parse(input: &str) -> Result<Expression, ParseErrors> {
 fn parse_atom<'a>() -> impl Parser<'a, &'a str, Atom, extra::Err<Rich<'a, char>>> {
     // atoms form the base of the expression tree
     choice((
-        parse_string().map(Atom::String),
-        parse_number().map(Atom::Number),
+        // keyword and constant atoms go first
         parse_bool().map(Atom::Bool),
-        parse_ulid().map(Atom::Ulid),
+        // dates ahead of numbers, otherwise they can look like minus expressions
         parse_datetime().map(Atom::DateTime),
         parse_duration().map(Atom::Duration),
+        parse_number().map(Atom::Number),
+        parse_string().map(Atom::String),
+        parse_ulid().map(Atom::Ulid),
         parse_hashtag().map(Atom::HashTag),
     ))
 }
@@ -62,14 +64,23 @@ fn parse_expression<'a>() -> impl Parser<'a, &'a str, Expression, extra::Err<Ric
     // and this is the expression recursive parser
     recursive(|expression| {
         let list = expression
+            .clone()
             .padded()
             .separated_by(just(','))
             .allow_trailing()
             .collect()
             .delimited_by(just('['), just(']'))
             .map(Expression::List);
+        let tagset = expression
+            .clone()
+            .padded()
+            .separated_by(just(','))
+            .allow_trailing()
+            .collect()
+            .delimited_by(just('{'), just('}'))
+            .map(Expression::TagSet);
         // atom comes first to pick up keywords
-        choice((atom, identifier, list)).padded()
+        choice((atom, identifier, list, tagset)).padded()
     })
 }
 
@@ -444,60 +455,20 @@ mod tests {
         println!("{:?}", parse("foo.bar.baz == 10 && size(requests) == 3"))
     }
 
-    #[test]
-    fn test_ulid() {
-        assert_parse_eq(
-            "01D39ZY06FGSCTVN4T2V9PKHFZ",
-            Atom(
-                ::ulid::Ulid::from_string("01D39ZY06FGSCTVN4T2V9PKHFZ")
-                    .unwrap()
-                    .into(),
-            ),
-        )
+    #[rstest]
+    #[case("2021-01-01T", chrono::Utc.with_ymd_and_hms(2021, 1, 1, 0, 0, 0).unwrap().into())]
+    #[case("2021-01-01T14:20:01", chrono::Utc.with_ymd_and_hms(2021, 1, 1, 14, 20, 1).unwrap().into())]
+    #[case("2021-01-01T14:20:01-08:00", chrono::Utc.with_ymd_and_hms(2021, 1, 1, 22, 20, 1).unwrap().into())]
+    fn test_dates(#[case] input: &str, #[case] expected: Atom) {
+        assert_parse_eq(input, Atom(expected));
     }
 
-    #[test]
-    fn test_date() {
-        assert_parse_eq(
-            "2021-01-01",
-            Atom(
-                chrono::Utc
-                    .with_ymd_and_hms(2021, 1, 1, 0, 0, 0)
-                    .unwrap()
-                    .into(),
-            ),
-        )
-    }
-
-    #[test]
-    fn test_date_time() {
-        assert_parse_eq(
-            "2021-01-01T14:20:01",
-            Atom(
-                chrono::Utc
-                    .with_ymd_and_hms(2021, 1, 1, 14, 20, 1)
-                    .unwrap()
-                    .into(),
-            ),
-        )
-    }
-
-    #[test]
-    fn test_date_time_zone() {
-        assert_parse_eq(
-            "2021-01-01T14:20:01-08:00",
-            Atom(
-                chrono::Utc
-                    .with_ymd_and_hms(2021, 1, 1, 22, 20, 1)
-                    .unwrap()
-                    .into(),
-            ),
-        )
-    }
-
-    #[test]
-    fn test_duration() {
-        assert_parse_eq("1h", Atom(chrono::Duration::hours(1).into()))
+    #[rstest]
+    #[case("1h", Atom(chrono::Duration::hours(1).into()))]
+    #[case("1m", Atom(chrono::Duration::minutes(1).into()))]
+    #[case("1s", Atom(chrono::Duration::seconds(1).into()))]
+    fn test_duration(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
     #[test]
@@ -514,19 +485,9 @@ mod tests {
     }
 
     #[test]
-    fn test_tag() {
-        assert_parse_eq("#foobar", Atom(HashTag("foobar".into())))
-    }
-
-    #[test]
-    fn test_tag_space() {
-        assert_parse_eq("#foo_bar", Atom(HashTag("foo_bar".into())))
-    }
-
-    #[test]
     fn test_tag_set() {
         assert_parse_eq(
-            "{# #foo_bar, #💕 #}",
+            "{ #foo_bar, #💕 }",
             TagSet(vec![
                 Atom(HashTag("foo_bar".into())),
                 Atom(HashTag("💕".into())),

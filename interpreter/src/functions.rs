@@ -473,7 +473,6 @@ pub fn max(Arguments(args): Arguments) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::context::Context;
     use crate::tests::test_script;
 
