@@ -167,6 +167,8 @@ impl From<Identifier> for String {
 /// ```
 ///
 pub fn parse_identifier<'a>() -> impl Parser<'a, &'a str, Identifier, extra::Err<Rich<'a, char>>> {
-    let body_pattern = r"[\p{XID_Start}\p{Emoji}][\p{XID_Continue}\p{Emoji}]*";
+    // start with a Unicode Identifier Start character or an emoji
+    // but not any of our punctuation characters that get used as sigils and operators
+    let body_pattern = r"[\p{XID_Start}\p{Emoji}&&[^\p{Po}\p{Punct}]][\p{XID_Continue}\p{Emoji}]*";
     regex(body_pattern).map(|s: &str| s.into())
 }

@@ -157,9 +157,8 @@ impl TryFrom<&str> for Program {
 #[cfg(test)]
 mod tests {
     use crate::context::Context;
-    use crate::objects::{ResolveResult, Value};
-    use crate::{ExecutionError, Program};
-    use std::collections::HashMap;
+    use crate::objects::ResolveResult;
+    use crate::Program;
     use std::convert::TryInto;
 
     /// Tests the provided script and returns the result. An optional context can be provided.

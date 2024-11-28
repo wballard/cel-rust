@@ -99,7 +99,10 @@ mod test {
     #[case("2023-05-28T00:00:42+00:00", chrono::DateTime::parse_from_rfc3339("2023-05-28T00:00:42+00:00").unwrap().with_timezone(&chrono::Utc))]
     #[case("2023-05-28T00:00:42.123+00:00", chrono::DateTime::parse_from_rfc3339("2023-05-28T00:00:42.123+00:00").unwrap().with_timezone(&chrono::Utc))]
     #[case("2023-05-28T", chrono::DateTime::parse_from_rfc3339("2023-05-28T00:00:00Z").unwrap().with_timezone(&chrono::Utc))]
-    fn test_parse_datetime(#[case] input: &str, #[case] expected: chrono::DateTime<chrono::Utc>) {
+    fn parse_datetime_strings(
+        #[case] input: &str,
+        #[case] expected: chrono::DateTime<chrono::Utc>,
+    ) {
         let result: chrono::DateTime<chrono::Utc> = parse_datetime().parse(input).unwrap();
         assert_eq!(result, expected);
     }

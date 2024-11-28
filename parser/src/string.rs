@@ -151,7 +151,7 @@ mod tests {
     use rstest::rstest;
 
     #[test]
-    fn test_parse_unicode() {
+    fn parse_unicode_escapes() {
         assert_eq!(parse_unicode().parse("\\u270C").unwrap(), '✌');
         assert_eq!(parse_unicode().parse("\\xAC").unwrap(), '¬');
         assert_eq!(parse_unicode().parse("\\U0001f431").unwrap(), '🐱');
@@ -160,11 +160,11 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_escape() {
+    fn parse_escape() {
         assert_eq!(parse_escapes().parse("\\a").unwrap(), '\u{07}');
     }
     #[test]
-    fn test_parse_unicode_fail() {
+    fn parse_unicode_fail() {
         assert_eq!(
             parse_unicode()
                 .parse("\\u27ZC")

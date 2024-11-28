@@ -55,26 +55,30 @@ fn parse_atom<'a>() -> impl Parser<'a, &'a str, Atom, extra::Err<Rich<'a, char>>
 }
 
 fn parse_expression<'a>() -> impl Parser<'a, &'a str, Expression, extra::Err<Rich<'a, char>>> {
+    // building blocks -- these are boxed to allow cloning to comply with the recursive parser
+    let atom = parse_atom().map(Expression::Atom).boxed();
+    let identifier = parse_identifier().map(Expression::Ident).boxed();
+
+    // and this is the expression recursive parser
     recursive(|expression| {
-        let atom = parse_atom().map(Expression::Atom);
-        let identifier = parse_identifier().map(Expression::Ident);
         let list = expression
-            .delimited_by(just('['), just(']'))
+            .padded()
             .separated_by(just(','))
             .allow_trailing()
             .collect()
+            .delimited_by(just('['), just(']'))
             .map(Expression::List);
-        list
+        // atom comes first to pick up keywords
+        choice((atom, identifier, list)).padded()
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::Expression;
+    use crate::*;
     use chrono::TimeZone;
     use rstest::rstest;
     use rust_decimal_macros::dec;
-    use ulid::Ulid;
 
     use crate::{ArithmeticOp, Atom, Atom::*, Expression::*, Member::*, RelationOp, UnaryOp};
 
@@ -115,6 +119,31 @@ mod tests {
     #[case("false", Atom(Bool(false)))]
     fn bools(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
+    }
+
+    #[rstest]
+    #[case("#one", Atom(HashTag("one".into())))]
+    #[case("#🦃", Atom(HashTag("🦃".into())))]
+    fn hashtags(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
+    }
+
+    #[rstest]
+    #[case("&01ARZ3NDEKTSV4RRFFQ69G5FAV", Atom(::ulid::Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").unwrap().into()))]
+    fn ulid(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
+    }
+
+    #[test]
+    fn list() {
+        assert_parse_eq(
+            "[1, 2, 3]",
+            List(vec![
+                Atom(Number(dec!(1))),
+                Atom(Number(dec!(2))),
+                Atom(Number(dec!(3))),
+            ]),
+        )
     }
 
     #[test]
@@ -420,7 +449,7 @@ mod tests {
         assert_parse_eq(
             "01D39ZY06FGSCTVN4T2V9PKHFZ",
             Atom(
-                Ulid::from_string("01D39ZY06FGSCTVN4T2V9PKHFZ")
+                ::ulid::Ulid::from_string("01D39ZY06FGSCTVN4T2V9PKHFZ")
                     .unwrap()
                     .into(),
             ),
