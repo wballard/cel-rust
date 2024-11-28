@@ -34,6 +34,12 @@ pub fn parse_ulid<'a>() -> impl Parser<'a, &'a str, Ulid, extra::Err<Rich<'a, ch
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone)]
 pub struct HashTag(String);
 
+impl AsRef<str> for HashTag {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 impl From<&str> for HashTag {
     fn from(s: &str) -> Self {
         if s.starts_with("#") {
@@ -114,9 +120,27 @@ impl From<&str> for Identifier {
     }
 }
 
+impl From<&Identifier> for Identifier {
+    fn from(id: &Identifier) -> Self {
+        Identifier(id.0.clone())
+    }
+}
+
 impl fmt::Display for Identifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl From<&Identifier> for String {
+    fn from(value: &Identifier) -> Self {
+        value.0.to_string()
+    }
+}
+
+impl From<Identifier> for String {
+    fn from(value: Identifier) -> Self {
+        value.0.clone()
     }
 }
 

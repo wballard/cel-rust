@@ -1,7 +1,7 @@
 use crate::magic::{Function, FunctionRegistry, Handler};
 use crate::objects::Value;
 use crate::{functions, ExecutionError};
-use cel_parser::Expression;
+use cel_parser::*;
 use std::collections::HashMap;
 
 /// Context is a collection of variables and functions that can be used
@@ -9,12 +9,12 @@ use std::collections::HashMap;
 ///
 /// The context can be either a parent context, or a child context. A
 /// parent context is created by default and contains all of the built-in
-/// functions. A child context can be created by calling `.clone()`. The
-/// child context has it's own variables (which can be added to), but it
+/// functions.
+///
+/// A child context has it's own variables (which can be added to), but it
 /// will also reference the parent context. This allows for variables to
 /// be overridden within the child context while still being able to
-/// resolve variables in the child's parents. You can have theoretically
-/// have an infinite number of child contexts that reference each-other.
+/// resolve variables in the child's parents.
 ///
 /// So why is this important? Well some CEL-macros such as the `.map` macro
 /// declare intermediate user-specified identifiers that should only be
@@ -32,18 +32,18 @@ use std::collections::HashMap;
 pub enum Context<'a> {
     Root {
         functions: FunctionRegistry,
-        variables: HashMap<String, Value>,
+        variables: HashMap<Identifier, Value>,
     },
     Child {
         parent: &'a Context<'a>,
-        variables: HashMap<String, Value>,
+        variables: HashMap<Identifier, Value>,
     },
 }
 
 impl<'a> Context<'a> {
     pub fn add_variable_from_value<S, V>(&mut self, name: S, value: V)
     where
-        S: Into<String>,
+        S: Into<Identifier>,
         V: Into<Value>,
     {
         match self {
@@ -56,52 +56,42 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub fn get_variable<S>(&self, name: S) -> Result<Value, ExecutionError>
-    where
-        S: Into<String>,
-    {
-        let name = name.into();
+    pub fn get_variable(&self, name: &Identifier) -> Result<Value, ExecutionError> {
         match self {
             Context::Child { variables, parent } => variables
-                .get(&name)
+                .get(name)
                 .cloned()
-                .or_else(|| parent.get_variable(&name).ok())
-                .ok_or_else(|| ExecutionError::UndeclaredReference(name)),
+                .or_else(|| parent.get_variable(name).ok())
+                .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone())),
             Context::Root { variables, .. } => variables
-                .get(&name)
+                .get(name)
                 .cloned()
-                .ok_or_else(|| ExecutionError::UndeclaredReference(name)),
+                .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone())),
         }
     }
 
-    pub(crate) fn has_function<S>(&self, name: S) -> bool
-    where
-        S: Into<String>,
-    {
-        let name = name.into();
+    pub(crate) fn has_function(&self, name: &Identifier) -> bool {
         match self {
-            Context::Root { functions, .. } => functions.has(&name),
+            Context::Root { functions, .. } => functions.has(name),
             Context::Child { parent, .. } => parent.has_function(name),
         }
     }
 
-    pub(crate) fn get_function<S>(&self, name: S) -> Option<Box<dyn Function>>
-    where
-        S: Into<String>,
-    {
-        let name = name.into();
+    pub(crate) fn get_function(&self, name: &Identifier) -> Option<Box<dyn Function>> {
         match self {
-            Context::Root { functions, .. } => functions.get(&name),
+            Context::Root { functions, .. } => functions.get(name),
             Context::Child { parent, .. } => parent.get_function(name),
         }
     }
 
-    pub fn add_function<T: 'static, F>(&mut self, name: &str, value: F)
+    pub fn add_function<ID, T: 'static, F>(&mut self, name: ID, value: F)
     where
+        ID: Into<Identifier>,
         F: Handler<T> + 'static + Send + Sync,
     {
+        let identifier = name.into();
         if let Context::Root { functions, .. } = self {
-            functions.add(name, value);
+            functions.add(&identifier, value);
         };
     }
 

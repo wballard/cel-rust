@@ -1,9 +1,9 @@
 use crate::context::Context;
-use crate::magic::{Arguments, Identifier, This};
+use crate::magic::{Arguments, This};
 use crate::objects::{Value, ValueList, ValueType};
 use crate::resolvers::{Argument, Resolver};
 use crate::ExecutionError;
-use cel_parser::{format_duration, Expression};
+use cel_parser::*;
 use std::cmp::Ordering;
 use std::convert::TryInto;
 
@@ -16,7 +16,7 @@ type Result<T> = std::result::Result<T, ExecutionError>;
 /// to variables, and the arguments to the function call.
 #[derive(Clone)]
 pub struct FunctionContext<'context> {
-    pub name: String,
+    pub name: Identifier,
     pub this: Option<Value>,
     pub ptx: &'context Context<'context>,
     pub args: Vec<Expression>,
@@ -25,7 +25,7 @@ pub struct FunctionContext<'context> {
 
 impl<'context> FunctionContext<'context> {
     pub fn new(
-        name: String,
+        name: Identifier,
         this: Option<Value>,
         ptx: &'context Context<'context>,
         args: Vec<Expression>,
@@ -49,7 +49,7 @@ impl<'context> FunctionContext<'context> {
 
     /// Returns an execution error for the currently execution function.
     pub fn error<M: ToString>(&self, message: M) -> ExecutionError {
-        ExecutionError::function_error(self.name.as_str(), message)
+        ExecutionError::function_error(self.name.clone(), message)
     }
 }
 
@@ -76,9 +76,8 @@ pub fn size(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
     let size = match this {
         Value::List(l) => l.list.len(),
         Value::TagSet(t) => t.set.len(),
-        Value::Map(m) => m.map.len(),
         Value::String(s) => s.len(),
-        Value::Bytes(b) => b.len(),
+        Value::HashTag(h) => h.as_ref().len(),
         Value::Number(_) => 1,
         value => return Err(ftx.error(format!("cannot determine the size of {:?}", value))),
     };
@@ -118,9 +117,6 @@ pub fn size(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
 pub fn contains(This(this): This<Value>, arg: Value) -> Result<Value> {
     Ok(match this {
         Value::List(v) => v.list.contains(&arg),
-        Value::Map(v) => v
-            .map
-            .contains_key(&arg.try_into().map_err(ExecutionError::UnsupportedKeyType)?),
         Value::String(s) => {
             if let Value::String(arg) = arg {
                 s.contains(arg.as_str())
@@ -156,7 +152,7 @@ pub fn string(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
 
         Value::Timestamp(t) => Value::String(t.to_rfc3339()),
 
-        Value::Duration(v) => Value::String(format_duration(&v)),
+        Value::Duration(v) => Value::String(v.to_string()),
         Value::Number(v) => Value::String(v.to_string()),
         Value::Bytes(v) => Value::String(String::from_utf8_lossy(v.as_slice()).into()),
         v => return Err(ftx.error(format!("cannot convert {:?} to string", v))),
@@ -256,23 +252,13 @@ pub fn map(
             }
             Value::List(ValueList { list: values })
         }
-        Value::Map(map) => {
-            let mut values = Vec::with_capacity(map.map.len());
-            let mut ptx = ftx.ptx.new_inner_scope();
-            for (key, _) in map.map.iter() {
-                ptx.add_variable_from_value(ident.clone(), key.clone());
-                let value = ptx.resolve(&expr)?;
-                values.push(value);
-            }
-            Value::List(ValueList { list: values })
-        }
         _ => return Err(this.error_expected_type(ValueType::List)),
     }
     .into()
 }
 
 /// Filters the provided list by applying an expression to each input item
-/// and including the input item in the resulting list, only if the expression
+/// and including the input item in the resulting, only if the expression
 /// returned true.
 ///
 /// This function is intended to be used like the CEL-go `filter` macro:
@@ -306,7 +292,7 @@ pub fn filter(
 }
 
 /// Returns a boolean value indicating whether every value in the provided
-/// list or map met the predicate defined by the provided expression. If
+/// meet the predicate defined by the provided expression. If
 /// called on a map, the predicate is applied to the map keys.
 ///
 /// This function is intended to be used like the CEL-go `all` macro:
@@ -315,7 +301,6 @@ pub fn filter(
 /// # Example
 /// ```cel
 /// [1, 2, 3].all(x, x > 0) == true
-/// [{1:true, 2:true, 3:false}].all(x, x > 0) == true
 /// ```
 pub fn all(
     ftx: &FunctionContext,
@@ -334,22 +319,12 @@ pub fn all(
             }
             Ok(true)
         }
-        Value::Map(value) => {
-            let mut ptx = ftx.ptx.new_inner_scope();
-            for key in value.map.keys() {
-                ptx.add_variable_from_value(&ident, key);
-                if let Value::Bool(false) = ptx.resolve(&expr)? {
-                    return Ok(false);
-                }
-            }
-            Ok(true)
-        }
         _ => return Err(this.error_expected_type(ValueType::List)),
     };
 }
 
 /// Returns a boolean value indicating whether a or more values in the provided
-/// list or map meet the predicate defined by the provided expression.
+/// meet the predicate defined by the provided expression.
 ///
 /// If called on a map, the predicate is applied to the map keys.
 ///
@@ -359,7 +334,6 @@ pub fn all(
 /// # Example
 /// ```cel
 /// [1, 2, 3].exists(x, x > 0) == true
-/// [{1:true, 2:true, 3:false}].exists(x, x > 0) == true
 /// ```
 pub fn exists(
     ftx: &FunctionContext,
@@ -378,24 +352,12 @@ pub fn exists(
             }
             Ok(false)
         }
-        Value::Map(value) => {
-            let mut ptx = ftx.ptx.new_inner_scope();
-            for key in value.map.keys() {
-                ptx.add_variable_from_value(&ident, key);
-                if let Value::Bool(true) = ptx.resolve(&expr)? {
-                    return Ok(true);
-                }
-            }
-            Ok(false)
-        }
         _ => Err(this.error_expected_type(ValueType::List)),
     }
 }
 
 /// Returns a boolean value indicating whether only one value in the provided
-/// list or map meets the predicate defined by the provided expression.
-///
-/// If called on a map, the predicate is applied to the map keys.
+/// meets the predicate defined by the provided expression.
 ///
 /// This function is intended to be used like the CEL-go `exists` macro:
 /// <https://github.com/google/cel-spec/blob/master/doc/langdef.md#macros>
@@ -418,20 +380,6 @@ pub fn exists_one(
             let mut exists = false;
             for item in items.list.iter() {
                 ptx.add_variable_from_value(&ident, item);
-                if let Value::Bool(true) = ptx.resolve(&expr)? {
-                    if exists {
-                        return Ok(false);
-                    }
-                    exists = true;
-                }
-            }
-            Ok(exists)
-        }
-        Value::Map(value) => {
-            let mut ptx = ftx.ptx.new_inner_scope();
-            let mut exists = false;
-            for key in value.map.keys() {
-                ptx.add_variable_from_value(&ident, key);
                 if let Value::Bool(true) = ptx.resolve(&expr)? {
                     if exists {
                         return Ok(false);
@@ -525,6 +473,7 @@ pub fn max(Arguments(args): Arguments) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::context::Context;
     use crate::tests::test_script;
 
@@ -547,18 +496,7 @@ mod tests {
 
     #[test]
     fn test_has() {
-        let tests = vec![
-            ("map has", "has(foo.bar) == true"),
-            ("map has", "has(foo.bar) == true"),
-            ("map not has", "has(foo.baz) == false"),
-            ("map deep not has", "has(foo.baz.bar) == false"),
-        ];
-
-        for (name, script) in tests {
-            let mut ctx = Context::default();
-            ctx.add_variable_from_value("foo", std::collections::HashMap::from([("bar", 1)]));
-            assert_eq!(test_script(script, Some(ctx)), Ok(true.into()), "{}", name);
-        }
+        assert!(false, "TODO: implement entity has");
     }
 
     #[test]
@@ -795,7 +733,7 @@ mod tests {
                 "'foobar'.matches('(foo') == true", None),
             Err(
                 crate::ExecutionError::FunctionError {
-                    function: "matches".to_string(),
+                    function: "matches".into(),
                     message: "'(foo' not a valid regex:\nregex parse error:\n    (foo\n    ^\nerror: unclosed group".to_string()
                 }
             )

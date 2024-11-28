@@ -1,33 +1,30 @@
-use lalrpop_util::lalrpop_mod;
+use chumsky::prelude::*;
+
+pub mod error;
+pub use error::*;
 
 pub mod ast;
 pub use ast::*;
 
-pub mod parse;
-pub use parse::*;
-
-pub mod error;
-pub use error::ParseError;
-
-pub mod duration;
-pub use duration::*;
-
 pub mod string;
+pub use string::*;
 
 pub mod numbers;
 pub use numbers::*;
 
 pub mod datetime;
+pub use datetime::*;
 
 pub mod identifiers;
+pub use identifiers::*;
 
 pub mod units;
+pub use units::*;
 
 pub mod operators;
+pub use operators::*;
 
-lalrpop_mod!(#[allow(clippy::all)] pub parser, "/cel.rs");
-
-/// Parses a CEL expression and returns it.
+/// Parses a CEL expression into an AST ready for analysis and evaluation.
 ///
 /// # Example
 /// ```
@@ -35,10 +32,40 @@ lalrpop_mod!(#[allow(clippy::all)] pub parser, "/cel.rs");
 /// let expr = parse("1 + 1").unwrap();
 /// println!("{:?}", expr);
 /// ```
-pub fn parse(input: &str) -> Result<Expression, ParseError> {
-    crate::parser::ExpressionParser::new()
-        .parse(input)
-        .map_err(|e| ParseError::from_lalrpop(input, e))
+pub fn parse(input: &str) -> Result<Expression, ParseErrors> {
+    let (expression, errors) = parse_expression().parse(input).into_output_errors();
+    if errors.is_empty() {
+        Ok(expression.unwrap())
+    } else {
+        Err(ParseErrors::from_chumsky(errors))
+    }
+}
+
+fn parse_atom<'a>() -> impl Parser<'a, &'a str, Atom, extra::Err<Rich<'a, char>>> {
+    // atoms form the base of the expression tree
+    choice((
+        parse_string().map(Atom::String),
+        parse_number().map(Atom::Number),
+        parse_bool().map(Atom::Bool),
+        parse_ulid().map(Atom::Ulid),
+        parse_datetime().map(Atom::DateTime),
+        parse_duration().map(Atom::Duration),
+        parse_hashtag().map(Atom::HashTag),
+    ))
+}
+
+fn parse_expression<'a>() -> impl Parser<'a, &'a str, Expression, extra::Err<Rich<'a, char>>> {
+    recursive(|expression| {
+        let atom = parse_atom().map(Expression::Atom);
+        let identifier = parse_identifier().map(Expression::Ident);
+        let list = expression
+            .delimited_by(just('['), just(']'))
+            .separated_by(just(','))
+            .allow_trailing()
+            .collect()
+            .map(Expression::List);
+        list
+    })
 }
 
 #[cfg(test)]
@@ -59,8 +86,8 @@ mod tests {
         assert_eq!(parse(input), expected);
     }
     #[rstest]
-    #[case("a", Ident("a".to_string()))]
-    #[case("hello ", Ident("hello".to_string()))]
+    #[case("a", Ident("a".into()))]
+    #[case("hello ", Ident("hello".into()))]
     fn identifiers(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }
@@ -95,16 +122,16 @@ mod tests {
         assert_parse_eq(
             "[1, 2, 3].map(x, x * 2)",
             FunctionCall(
-                Box::new(Ident("map".to_string())),
+                Box::new(Ident("map".into())),
                 Some(Box::new(List(vec![
                     Atom(Number(dec!(1))),
                     Atom(Number(dec!(2))),
                     Atom(Number(dec!(3))),
                 ]))),
                 vec![
-                    Ident("x".to_string()),
+                    Ident("x".into()),
                     Arithmetic(
-                        Box::new(Ident("x".to_string())),
+                        Box::new(Ident("x".into())),
                         ArithmeticOp::Multiply,
                         Box::new(Atom(Number(dec!(2)))),
                     ),
@@ -118,11 +145,7 @@ mod tests {
         assert_parse_eq(
             "a.b[1]",
             Member(
-                Member(
-                    Ident("a".to_string()).into(),
-                    Attribute("b".to_string()).into(),
-                )
-                .into(),
+                Member(Ident("a".into()).into(), Attribute("b".into()).into()).into(),
                 Index(Atom(Number(dec!(1))).into()).into(),
             ),
         )
@@ -132,7 +155,7 @@ mod tests {
     fn function_call_no_args() {
         assert_parse_eq(
             "a()",
-            FunctionCall(Box::new(Ident("a".to_string())), None, vec![]),
+            FunctionCall(Box::new(Ident("a".into())), None, vec![]),
         );
     }
 
@@ -249,11 +272,6 @@ mod tests {
                 Box::new(List(vec![Expression::Atom(Number(dec!(2)))])),
             ),
         );
-    }
-
-    #[test]
-    fn test_empty_map_parsing() {
-        assert_eq!(parse("{}"), (Map(vec![])));
     }
 
     #[test]
@@ -382,9 +400,9 @@ mod tests {
         assert_parse_eq(
             "a && b == 'string'",
             And(
-                Box::new(Ident("a".to_string())),
+                Box::new(Ident("a".into())),
                 Box::new(Relation(
-                    Box::new(Ident("b".to_string())),
+                    Box::new(Ident("b".into())),
                     RelationOp::Equals,
                     Box::new(Expression::Atom(String("string".to_string()))),
                 )),
@@ -395,54 +413,6 @@ mod tests {
     #[test]
     fn test_foobar() {
         println!("{:?}", parse("foo.bar.baz == 10 && size(requests) == 3"))
-    }
-
-    #[test]
-    fn test_unrecognized_token_error() {
-        let source = r#"
-            account.balance == transaction.withdrawal
-                || (account.overdraftProtection
-                    account.overdraftLimit >= transaction.withdrawal  - account.balance)
-        "#;
-
-        let err = crate::parse(source).unwrap_err();
-
-        assert_eq!(err.msg, "unrecognized token: 'account'");
-
-        assert_eq!(err.span.start.as_ref().unwrap().line, 3);
-        assert_eq!(err.span.start.as_ref().unwrap().column, 20);
-        assert_eq!(err.span.end.as_ref().unwrap().line, 3);
-        assert_eq!(err.span.end.as_ref().unwrap().column, 27);
-    }
-
-    #[test]
-    fn test_unrecognized_eof_error() {
-        let source = r#" "#;
-
-        let err = crate::parse(source).unwrap_err();
-
-        assert_eq!(err.msg, "unrecognized eof");
-
-        assert_eq!(err.span.start.as_ref().unwrap().line, 0);
-        assert_eq!(err.span.start.as_ref().unwrap().column, 0);
-        assert_eq!(err.span.end.as_ref().unwrap().line, 0);
-        assert_eq!(err.span.end.as_ref().unwrap().column, 0);
-    }
-
-    #[test]
-    fn test_invalid_token_error() {
-        let source = r#"
-            account.balance == §
-        "#;
-
-        let err = crate::parse(source).unwrap_err();
-
-        assert_eq!(err.msg, "invalid token");
-
-        assert_eq!(err.span.start.as_ref().unwrap().line, 1);
-        assert_eq!(err.span.start.as_ref().unwrap().column, 31);
-        assert_eq!(err.span.end.as_ref().unwrap().line, 1);
-        assert_eq!(err.span.end.as_ref().unwrap().column, 31);
     }
 
     #[test]

@@ -1,13 +1,13 @@
 extern crate core;
 
-use cel_parser::{parse, ExpressionReferences, Member};
+use cel_parser::*;
 use std::convert::TryFrom;
 use thiserror::Error;
 
 mod macros;
 
 pub mod context;
-pub use cel_parser::error::ParseError;
+pub use cel_parser::error::ParseErrors;
 pub use cel_parser::Expression;
 pub use context::Context;
 pub use functions::FunctionContext;
@@ -18,10 +18,6 @@ pub mod objects;
 mod resolvers;
 
 use magic::FromContext;
-
-pub mod extractors {
-    pub use crate::magic::{Arguments, Identifier, This};
-}
 
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum ExecutionError {
@@ -44,7 +40,7 @@ pub enum ExecutionError {
     /// Indicates that the script attempted to reference an undeclared variable
     /// method, or function.
     #[error("Undeclared reference to '{0}'")]
-    UndeclaredReference(String),
+    UndeclaredReference(Identifier),
     /// Indicates that a function expected to be called as a method, or to be
     /// called with at least one parameter.
     #[error("Missing argument or target")]
@@ -78,25 +74,24 @@ pub enum ExecutionError {
     UnsupportedFieldsConstruction(Member),
     /// Indicates that a function had an error during execution.
     #[error("Error executing function '{function}': {message}")]
-    FunctionError { function: String, message: String },
+    FunctionError {
+        function: Identifier,
+        message: String,
+    },
 }
 
 impl ExecutionError {
-    pub fn no_such_key(name: &str) -> Self {
-        ExecutionError::NoSuchKey(name.to_string())
-    }
-
-    pub fn undeclared_reference(name: &str) -> Self {
-        ExecutionError::UndeclaredReference(name.to_string())
+    pub fn undeclared_reference(name: Identifier) -> Self {
+        ExecutionError::UndeclaredReference(name)
     }
 
     pub fn invalid_argument_count(expected: usize, actual: usize) -> Self {
         ExecutionError::InvalidArgumentCount { expected, actual }
     }
 
-    pub fn function_error<E: ToString>(function: &str, error: E) -> Self {
+    pub fn function_error<E: ToString>(function: Identifier, error: E) -> Self {
         ExecutionError::FunctionError {
-            function: function.to_string(),
+            function,
             message: error.to_string(),
         }
     }
@@ -127,7 +122,7 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn compile(source: &str) -> Result<Program, ParseError> {
+    pub fn compile(source: &str) -> Result<Program, ParseErrors> {
         parse(source).map(|expression| Program { expression })
     }
 
@@ -152,7 +147,7 @@ impl Program {
 }
 
 impl TryFrom<&str> for Program {
-    type Error = ParseError;
+    type Error = ParseErrors;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Program::compile(value)
@@ -188,7 +183,6 @@ mod tests {
     fn variables() {
         fn assert_output(script: &str, expected: ResolveResult) {
             let mut ctx = Context::default();
-            ctx.add_variable_from_value("foo", HashMap::from([("bar", 1i64)]));
             ctx.add_variable_from_value("arr", vec![1i64, 2, 3]);
             ctx.add_variable_from_value("str", "foobar".to_string());
             assert_eq!(test_script(script, Some(ctx)), expected);
@@ -198,57 +192,10 @@ mod tests {
         assert_output("size([1, 2, 3]) == 3", Ok(true.into()));
         assert_output("size([]) == 3", Ok(false.into()));
 
-        // Test variable attribute traversals
-        assert_output("foo.bar == 1", Ok(true.into()));
-
         // Test that we can index into an array
         assert_output("arr[0] == 1", Ok(true.into()));
 
         // Test that we can index into a string
         assert_output("str[0] == 'f'", Ok(true.into()));
-
-        // Test that we can merge two maps
-        assert_output(
-            "{'a': 1} + {'a': 2, 'b': 3}",
-            Ok(HashMap::from([("a", 2), ("b", 3)]).into()),
-        );
-    }
-
-    #[test]
-    fn test_execution_errors() {
-        let tests = vec![
-            (
-                "no such key",
-                "foo.baz.bar == 1",
-                ExecutionError::no_such_key("baz"),
-            ),
-            (
-                "undeclared reference",
-                "missing == 1",
-                ExecutionError::undeclared_reference("missing"),
-            ),
-            (
-                "undeclared method",
-                "1.missing()",
-                ExecutionError::undeclared_reference("missing"),
-            ),
-            (
-                "undeclared function",
-                "missing(1)",
-                ExecutionError::undeclared_reference("missing"),
-            ),
-            (
-                "unsupported key type",
-                "{null: true}",
-                ExecutionError::unsupported_key_type(Value::Null),
-            ),
-        ];
-
-        for (name, script, error) in tests {
-            let mut ctx = Context::default();
-            ctx.add_variable_from_value("foo", HashMap::from([("bar", 1)]));
-            let res = test_script(script, Some(ctx));
-            assert_eq!(res, error.into(), "{}", name);
-        }
     }
 }

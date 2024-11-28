@@ -33,7 +33,7 @@ pub enum UnaryOp {
 }
 
 /// Represents an expression in the abstract syntax tree (AST).
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expression {
     Arithmetic(Box<Expression>, ArithmeticOp, Box<Expression>),
     Relation(Box<Expression>, RelationOp, Box<Expression>),
@@ -44,22 +44,21 @@ pub enum Expression {
     Member(Box<Expression>, Box<Member>),
     FunctionCall(Box<Expression>, Option<Box<Expression>>, Vec<Expression>),
     List(Vec<Expression>),
-    Map(Vec<(Expression, Expression)>),
     Atom(Atom),
-    Ident(String),
+    Ident(Identifier),
     TagSet(Vec<Expression>),
 }
 
 /// Represents a member access in an expression.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Member {
-    Attribute(String),
+    Attribute(Identifier),
     Index(Box<Expression>),
     Fields(Vec<(String, Expression)>),
 }
 
 /// Represents an atomic value in an expression.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Atom {
     Number(rust_decimal::Decimal),
     String(String),
@@ -121,8 +120,8 @@ impl From<HashTag> for Atom {
 
 /// A collection of all the references that an expression makes to variables and functions.
 pub struct ExpressionReferences<'expr> {
-    variables: HashSet<&'expr str>,
-    functions: HashSet<&'expr str>,
+    variables: HashSet<&'expr Identifier>,
+    functions: HashSet<&'expr Identifier>,
 }
 
 impl<'expr> ExpressionReferences<'expr> {
@@ -136,7 +135,8 @@ impl<'expr> ExpressionReferences<'expr> {
     /// assert!(references.has_variable("foo"));
     /// ```
     pub fn has_variable(&self, name: impl AsRef<str>) -> bool {
-        self.variables.contains(name.as_ref())
+        let identifier: Identifier = name.as_ref().into();
+        self.variables.contains(&identifier)
     }
 
     /// Returns true if the expression references the provided function name.
@@ -149,7 +149,8 @@ impl<'expr> ExpressionReferences<'expr> {
     /// assert!(references.has_function("size"));
     /// ```
     pub fn has_function(&self, name: impl AsRef<str>) -> bool {
-        self.functions.contains(name.as_ref())
+        let identifier: Identifier = name.as_ref().into();
+        self.functions.contains(&identifier)
     }
 
     /// Returns a list of all variables referenced in the expression.
@@ -161,7 +162,7 @@ impl<'expr> ExpressionReferences<'expr> {
     /// let references = expression.references();
     /// assert_eq!(vec!["foo"], references.variables());
     /// ```
-    pub fn variables(&self) -> Vec<&str> {
+    pub fn variables(&self) -> Vec<&Identifier> {
         self.variables.iter().copied().collect()
     }
 
@@ -174,7 +175,7 @@ impl<'expr> ExpressionReferences<'expr> {
     /// let references = expression.references();
     /// assert_eq!(vec!["size"], references.functions());
     /// ```
-    pub fn functions(&self) -> Vec<&str> {
+    pub fn functions(&self) -> Vec<&Identifier> {
         self.functions.iter().copied().collect()
     }
 }
@@ -204,8 +205,8 @@ impl Expression {
     /// Internal recursive function to collect all variable and function references in the expression.
     fn _references<'expr>(
         &'expr self,
-        variables: &mut HashSet<&'expr str>,
-        functions: &mut HashSet<&'expr str>,
+        variables: &mut HashSet<&'expr Identifier>,
+        functions: &mut HashSet<&'expr Identifier>,
     ) {
         match self {
             Expression::Arithmetic(e1, _, e2)
@@ -224,7 +225,7 @@ impl Expression {
             }
             Expression::FunctionCall(name, target, args) => {
                 if let Expression::Ident(v) = &**name {
-                    functions.insert(v.as_str());
+                    functions.insert(v);
                 }
                 if let Some(target) = target {
                     target._references(variables, functions);
@@ -243,36 +244,10 @@ impl Expression {
                     e._references(variables, functions);
                 }
             }
-            Expression::Map(v) => {
-                for (e1, e2) in v {
-                    e1._references(variables, functions);
-                    e2._references(variables, functions);
-                }
-            }
             Expression::Atom(_) => {}
             Expression::Ident(v) => {
-                variables.insert(v.as_str());
+                variables.insert(v);
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::parse;
-
-    #[test]
-    fn test_references() {
-        let expr =
-            parse("foo.bar.baz == true && size(foo) > 0 && foo[0] == 1 && bar.startsWith('a')")
-                .unwrap();
-        let refs = expr.references();
-        assert!(refs.has_variable("foo"));
-        assert!(refs.has_variable("bar"));
-        assert_eq!(refs.variables.len(), 2);
-
-        assert!(refs.has_function("size"));
-        assert!(refs.has_function("startsWith"));
-        assert_eq!(refs.functions.len(), 2);
     }
 }

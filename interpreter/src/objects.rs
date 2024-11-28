@@ -2,14 +2,13 @@ use crate::context::Context;
 use crate::functions::FunctionContext;
 use crate::ExecutionError;
 use base64;
-use cel_parser::ast::*;
+use cel_parser::*;
 use chrono::SecondsFormat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::convert::TryInto;
+use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 use std::ops;
 
@@ -37,115 +36,21 @@ impl From<Vec<Value>> for ValueSet {
     }
 }
 
-impl From<Vec<cel_parser::identifiers::HashTag>> for ValueSet {
-    fn from(list: Vec<cel_parser::identifiers::HashTag>) -> Self {
+impl From<Vec<HashTag>> for ValueSet {
+    fn from(list: Vec<HashTag>) -> Self {
         ValueSet {
             set: list.into_iter().map(Value::HashTag).collect(),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Hash, PartialOrd, Ord, Eq)]
-pub struct ValueMap {
-    pub map: BTreeMap<Key, Value>,
-}
-
-impl ValueMap {
-    /// Returns a reference to the value corresponding to the key.
-    pub fn get(&self, key: &Key) -> Option<&Value> {
-        self.map.get(key)
-    }
-}
-
-#[derive(Debug, Eq, PartialEq, Hash, Ord, Clone, PartialOrd)]
-pub enum Key {
-    Number(Decimal),
-    Bool(bool),
-    String(String),
-}
-
-/// Implement conversions from primitive types to [`Key`]
-impl From<String> for Key {
-    fn from(v: String) -> Self {
-        Key::String(v.clone())
-    }
-}
-
-impl<'a> From<&'a str> for Key {
-    fn from(v: &'a str) -> Self {
-        Key::String(v.into())
-    }
-}
-
-impl From<bool> for Key {
-    fn from(v: bool) -> Self {
-        Key::Bool(v)
-    }
-}
-
-impl From<Decimal> for Key {
-    fn from(v: Decimal) -> Self {
-        Key::Number(v)
-    }
-}
-
-impl From<u64> for Key {
-    fn from(v: u64) -> Self {
-        Key::Number(v.into())
-    }
-}
-
-impl Display for Key {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Key::Number(v) => write!(f, "{}", v),
-            Key::Bool(v) => write!(f, "{}", v),
-            Key::String(v) => write!(f, "{}", v),
-        }
-    }
-}
-
-impl TryInto<Key> for Value {
-    type Error = Value;
-
-    #[inline(always)]
-    fn try_into(self) -> Result<Key, Self::Error> {
-        match self {
-            Value::Number(v) => Ok(Key::Number(v)),
-            Value::String(v) => Ok(Key::String(v)),
-            Value::Bool(v) => Ok(Key::Bool(v)),
-            _ => Err(self),
-        }
-    }
-}
-
-impl<K: Into<Key>, V: Into<Value>> From<HashMap<K, V>> for ValueMap {
-    fn from(map: HashMap<K, V>) -> Self {
-        let mut new_map = BTreeMap::new();
-        for (k, v) in map {
-            new_map.insert(k.into(), v.into());
-        }
-        ValueMap { map: new_map }
-    }
-}
-
-impl From<Key> for String {
-    fn from(key: Key) -> Self {
-        match key {
-            Key::Number(v) => format!("{}", v),
-            Key::Bool(v) => format!("{}", v),
-            Key::String(v) => v.clone(),
-        }
-    }
-}
-
+/// Values that can be computed by the interpreter.
 #[derive(Debug, Clone)]
 pub enum Value {
     List(ValueList),
     TagSet(ValueSet),
-    Map(ValueMap),
 
-    Function(String, Option<Box<Value>>),
+    Function(Identifier, Option<Box<Value>>),
 
     // Atoms
     Number(Decimal),
@@ -156,13 +61,13 @@ pub enum Value {
     Timestamp(chrono::DateTime<chrono::Utc>),
     Null,
     Ulid(ulid::Ulid),
-    HashTag(cel_parser::identifiers::HashTag),
+    HashTag(HashTag),
 }
 
+/// Reverse type mapping to allow type inspection.
 #[derive(Clone, Copy, Debug)]
 pub enum ValueType {
     List,
-    Map,
     Function,
     Number,
     String,
@@ -181,7 +86,6 @@ impl Display for ValueType {
         match self {
             ValueType::List => write!(f, "list"),
             ValueType::TagSet => write!(f, "tagset"),
-            ValueType::Map => write!(f, "map"),
             ValueType::Function => write!(f, "function"),
             ValueType::Number => write!(f, "number"),
             ValueType::String => write!(f, "string"),
@@ -200,15 +104,12 @@ impl Value {
     pub fn type_of(&self) -> ValueType {
         match self {
             Value::List(_) => ValueType::List,
-            Value::Map(_) => ValueType::Map,
             Value::Function(_, _) => ValueType::Function,
             Value::Number(_) => ValueType::Number,
             Value::String(_) => ValueType::String,
             Value::Bytes(_) => ValueType::Bytes,
             Value::Bool(_) => ValueType::Bool,
-
             Value::Duration(_) => ValueType::Duration,
-
             Value::Timestamp(_) => ValueType::Timestamp,
             Value::Null => ValueType::Null,
             Value::Ulid(_) => ValueType::Ulid,
@@ -237,16 +138,6 @@ impl Display for Value {
                     write!(f, "{}", v)?;
                 }
                 write!(f, "]")
-            }
-            Value::Map(v) => {
-                write!(f, "{{")?;
-                for (i, (k, v)) in v.map.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}: {}", k, v)?;
-                }
-                write!(f, "}}")
             }
             Value::Function(name, target) => match target {
                 Some(target) => write!(f, "{}.{}", target, name),
@@ -336,7 +227,6 @@ impl From<String> for Value {
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Value::Map(a), Value::Map(b)) => a == b,
             (Value::List(a), Value::List(b)) => a == b,
             (Value::Function(a1, a2), Value::Function(b1, b2)) => a1 == b1 && a2 == b2,
             (Value::Number(a), Value::Number(b)) => a == b,
@@ -361,7 +251,6 @@ impl Eq for Value {}
 impl std::hash::Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
-            Value::Map(map) => map.hash(state),
             Value::List(list) => list.hash(state),
             Value::Function(name, target) => {
                 name.hash(state);
@@ -405,32 +294,6 @@ impl PartialOrd for Value {
     }
 }
 
-impl From<&Key> for Value {
-    fn from(value: &Key) -> Self {
-        match value {
-            Key::Number(v) => Value::Number(*v),
-            Key::Bool(v) => Value::Bool(*v),
-            Key::String(v) => Value::String(v.clone()),
-        }
-    }
-}
-
-impl From<Key> for Value {
-    fn from(value: Key) -> Self {
-        match value {
-            Key::Number(v) => Value::Number(v),
-            Key::Bool(v) => Value::Bool(v),
-            Key::String(v) => Value::String(v),
-        }
-    }
-}
-
-impl From<&Key> for Key {
-    fn from(key: &Key) -> Self {
-        key.clone()
-    }
-}
-
 impl<T: Into<Value>> From<Vec<T>> for Value {
     fn from(v: Vec<T>) -> Self {
         Value::List(ValueList {
@@ -451,12 +314,6 @@ impl<T: Into<Value>> From<Option<T>> for Value {
             Some(v) => v.into(),
             None => Value::Null,
         }
-    }
-}
-
-impl<K: Into<Key>, V: Into<Value>> From<HashMap<K, V>> for Value {
-    fn from(v: HashMap<K, V>) -> Self {
-        Value::Map(v.into())
     }
 }
 
@@ -499,20 +356,6 @@ impl From<Value> for String {
                     buf.push_str(&String::from(v.clone()));
                 }
                 buf.push(']');
-                buf
-            }
-            Value::Map(v) => {
-                let mut buf = String::new();
-                buf.push('{');
-                for (i, (k, v)) in v.map.iter().enumerate() {
-                    if i > 0 {
-                        buf.push_str(", ");
-                    }
-                    buf.push_str(&String::from(k.clone()));
-                    buf.push_str(": ");
-                    buf.push_str(&String::from(v.clone()));
-                }
-                buf.push('}');
                 buf
             }
             _ => "".to_string(),
@@ -588,10 +431,7 @@ impl<'a> Value {
                     RelationOp::In => match (left, right) {
                         (Value::String(l), Value::String(r)) => r.contains(&*l),
                         (any, Value::List(v)) => v.list.contains(&any),
-                        (any, Value::Map(m)) => match any.try_into() {
-                            Ok(key) => m.map.contains_key(&key),
-                            Err(_) => false,
-                        },
+                        //TODO: implement for TagSet
                         (left, right) => Err(ExecutionError::ValuesNotComparable(left, right))?,
                     },
                 };
@@ -657,22 +497,11 @@ impl<'a> Value {
                     .collect();
                 Value::TagSet(list.into()).into()
             }
-            Expression::Map(items) => {
-                let mut map = BTreeMap::default();
-                for (k, v) in items.iter() {
-                    let key = Value::resolve(k, ctx)?
-                        .try_into()
-                        .map_err(ExecutionError::UnsupportedKeyType)?;
-                    let value = Value::resolve(v, ctx)?;
-                    map.insert(key, value);
-                }
-                Ok(Value::Map(ValueMap { map }))
-            }
             Expression::Ident(name) => ctx.get_variable(name),
             Expression::FunctionCall(name, target, args) => {
                 if let Expression::Ident(name) = &**name {
                     let func = ctx
-                        .get_function(&**name)
+                        .get_function(name)
                         .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone()))?;
                     match target {
                         None => {
@@ -726,22 +555,6 @@ impl<'a> Value {
                             Some(str) => Ok(Value::String(str.to_string())),
                         }
                     }
-                    (Value::Map(map), Value::String(property)) => map
-                        .get(&property.into())
-                        .cloned()
-                        .unwrap_or(Value::Null)
-                        .into(),
-                    (Value::Map(map), Value::Bool(property)) => map
-                        .get(&property.into())
-                        .cloned()
-                        .unwrap_or(Value::Null)
-                        .into(),
-                    (Value::Map(map), Value::Number(property)) => map
-                        .get(&property.into())
-                        .cloned()
-                        .unwrap_or(Value::Null)
-                        .into(),
-                    (Value::Map(_), index) => Err(ExecutionError::UnsupportedMapIndex(index)),
                     (Value::List(_), index) => Err(ExecutionError::UnsupportedListIndex(index)),
                     (value, index) => Err(ExecutionError::UnsupportedIndex(value, index)),
                 }
@@ -750,21 +563,18 @@ impl<'a> Value {
                 member.clone(),
             )),
             Member::Attribute(name) => {
-                // This will always either be because we're trying to access
-                // a property on self, or a method on self.
-                let child = match self {
-                    Value::Map(ref m) => m.map.get(&name.clone().into()).cloned(),
-                    _ => None,
-                };
+                !unimplemented!()
 
                 // If the property is both an attribute and a method, then we
                 // give priority to the property. Maybe we can implement lookahead
                 // to see if the next token is a function call?
+                /*
                 match (child, ctx.has_function(name)) {
                     (None, false) => ExecutionError::NoSuchKey(name.clone()).into(),
                     (Some(child), _) => child.into(),
                     (None, true) => Value::Function(name.clone(), Some(self.into())).into(),
                 }
+                */
             }
         }
     }
@@ -773,7 +583,6 @@ impl<'a> Value {
     fn to_bool(&self) -> bool {
         match self {
             Value::List(v) => !v.list.is_empty(),
-            Value::Map(v) => !v.map.is_empty(),
             Value::TagSet(v) => !v.set.is_empty(),
             Value::Number(v) => *v != dec!(0),
             Value::String(v) => !v.is_empty(),
@@ -841,17 +650,6 @@ impl ops::Add<Value> for Value {
                 new.extend_from_slice(&l);
                 new.extend_from_slice(&r);
                 Value::Bytes(new).into()
-            }
-            // Merge two maps should overwrite keys in the left map with the right map
-            (Value::Map(l), Value::Map(r)) => {
-                let mut new = BTreeMap::default();
-                for (k, v) in l.map.iter() {
-                    new.insert(k.clone(), v.clone());
-                }
-                for (k, v) in r.map.iter() {
-                    new.insert(k.clone(), v.clone());
-                }
-                Value::Map(ValueMap { map: new }).into()
             }
             (Value::Null, Value::Null) => Value::Null.into(),
 
@@ -952,32 +750,8 @@ impl ops::Rem<Value> for Value {
 
 #[cfg(test)]
 mod tests {
-    use crate::{objects::Key, Context, ExecutionError, Program, Value};
+    use crate::*;
     use std::collections::HashMap;
-
-    #[test]
-    fn test_indexed_map_access() {
-        let mut context = Context::default();
-        let mut headers = HashMap::new();
-        headers.insert("Content-Type", "application/json".to_string());
-        context.add_variable_from_value("headers", headers);
-
-        let program = Program::compile("headers[\"Content-Type\"]").unwrap();
-        let value = program.execute(&context).unwrap();
-        assert_eq!(value, "application/json".into());
-    }
-
-    #[test]
-    fn test_numeric_map_access() {
-        let mut context = Context::default();
-        let mut numbers: HashMap<Key, String> = HashMap::new();
-        numbers.insert(1.into(), "one".to_string());
-        context.add_variable_from_value("numbers", numbers);
-
-        let program = Program::compile("numbers[1]").unwrap();
-        let value = program.execute(&context).unwrap();
-        assert_eq!(value, "one".into());
-    }
 
     #[test]
     fn test_heterogeneous_compare() {

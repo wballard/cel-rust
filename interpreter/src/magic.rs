@@ -1,7 +1,7 @@
 use crate::macros::{impl_conversions, impl_handler};
 use crate::resolvers::{AllArguments, Argument};
 use crate::{ExecutionError, FunctionContext, ResolveResult, Value, ValueList};
-use cel_parser::Expression;
+use cel_parser::*;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
@@ -160,33 +160,18 @@ where
 ///     expr: Expression,        // <- x * 2
 /// ) -> Result<Value>;
 /// ```
-#[derive(Clone)]
-pub struct Identifier(pub String);
-
 impl<'a, 'context> FromContext<'a, 'context> for Identifier {
     fn from_context(ctx: &'a mut FunctionContext<'context>) -> Result<Self, ExecutionError>
     where
         Self: Sized,
     {
         match arg_expr_from_context(ctx) {
-            Expression::Ident(ident) => Ok(Identifier(ident.clone())),
+            Expression::Ident(ident) => Ok(ident.clone()),
             expr => Err(ExecutionError::UnexpectedType {
                 got: format!("{:?}", expr),
                 want: "identifier".to_string(),
             }),
         }
-    }
-}
-
-impl From<&Identifier> for String {
-    fn from(value: &Identifier) -> Self {
-        value.0.to_string()
-    }
-}
-
-impl From<Identifier> for String {
-    fn from(value: Identifier) -> Self {
-        value.0.clone()
     }
 }
 
@@ -285,17 +270,17 @@ impl_handler!(C1, C2, C3, C4, C5, C6, C7, C8, C9);
 
 #[derive(Default)]
 pub struct FunctionRegistry {
-    functions: HashMap<String, Box<dyn Function>>,
+    functions: HashMap<Identifier, Box<dyn Function>>,
 }
 
 impl FunctionRegistry {
-    pub(crate) fn add<H, T>(&mut self, name: &str, handler: H)
+    pub(crate) fn add<H, T>(&mut self, name: &Identifier, handler: H)
     where
         H: Handler<T> + 'static + Send + Sync,
         T: 'static,
     {
         self.functions.insert(
-            name.to_string(),
+            name.clone(),
             Box::new(HandlerFunction {
                 handler,
                 into_callable: |h, ctx| Box::new(HandlerCallable::new(h, ctx)),
@@ -303,15 +288,17 @@ impl FunctionRegistry {
         );
     }
 
-    pub(crate) fn get(&self, name: &str) -> Option<Box<dyn Function>> {
+    pub(crate) fn get(&self, name: &Identifier) -> Option<Box<dyn Function>> {
         self.functions.get(name).map(|f| f.clone_box())
     }
 
-    pub(crate) fn has(&self, name: &str) -> bool {
+    pub(crate) fn has(&self, name: &Identifier) -> bool {
         self.functions.contains_key(name)
     }
 }
 
+/// A trait for types that can be converted into a [`ResolveResult`] by calling
+/// as a function with a [`FunctionContext`] to resolve the values of its arguments.
 pub trait Function: Send + Sync {
     fn clone_box(&self) -> Box<dyn Function>;
     fn into_callable<'a>(self: Box<Self>, ctx: &'a mut FunctionContext) -> Box<dyn Callable + 'a>;
@@ -349,7 +336,7 @@ where
     }
 }
 
-// Callable and HandlerCallable
+/// todo: is this leftovers?
 pub trait Callable {
     fn call(&mut self) -> ResolveResult;
 }
