@@ -65,22 +65,31 @@ fn parse_expression<'a>() -> impl Parser<'a, &'a str, Expression, extra::Err<Ric
     recursive(|expression| {
         let list = expression
             .clone()
-            .padded()
             .separated_by(just(','))
             .allow_trailing()
             .collect()
             .delimited_by(just('['), just(']'))
             .map(Expression::List);
+        let argument_list = expression
+            .clone()
+            .separated_by(just(','))
+            .allow_trailing()
+            .collect()
+            .delimited_by(just('('), just(')'));
+        let function_call = parse_identifier()
+            .boxed()
+            .clone()
+            .then(argument_list.clone())
+            .map(|(name, args)| Expression::FunctionCall(name, None, args));
         let tagset = expression
             .clone()
-            .padded()
             .separated_by(just(','))
             .allow_trailing()
             .collect()
             .delimited_by(just('{'), just('}'))
             .map(Expression::TagSet);
         // atom comes first to pick up keywords
-        choice((atom, identifier, list, tagset)).padded()
+        choice((function_call, atom, identifier, list, tagset)).padded()
     })
 }
 
@@ -162,7 +171,7 @@ mod tests {
         assert_parse_eq(
             "[1, 2, 3].map(x, x * 2)",
             FunctionCall(
-                Box::new(Ident("map".into())),
+                "map".into(),
                 Some(Box::new(List(vec![
                     Atom(Number(dec!(1))),
                     Atom(Number(dec!(2))),
@@ -193,10 +202,7 @@ mod tests {
 
     #[test]
     fn function_call_no_args() {
-        assert_parse_eq(
-            "a()",
-            FunctionCall(Box::new(Ident("a".into())), None, vec![]),
-        );
+        assert_parse_eq("a()", FunctionCall("a".into(), None, vec![]));
     }
 
     #[test]

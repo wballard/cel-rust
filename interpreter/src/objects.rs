@@ -499,30 +499,23 @@ impl<'a> Value {
             }
             Expression::Ident(name) => ctx.get_variable(name),
             Expression::FunctionCall(name, target, args) => {
-                if let Expression::Ident(name) = &**name {
-                    let func = ctx
-                        .get_function(name)
-                        .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone()))?;
-                    match target {
-                        None => {
-                            let mut ctx =
-                                FunctionContext::new(name.clone(), None, ctx, args.clone());
-                            func.call_with_context(&mut ctx)
-                        }
-                        Some(target) => {
-                            let mut ctx = FunctionContext::new(
-                                name.clone(),
-                                Some(Value::resolve(target, ctx)?),
-                                ctx,
-                                args.clone(),
-                            );
-                            func.call_with_context(&mut ctx)
-                        }
+                let func = ctx
+                    .get_function(name)
+                    .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone()))?;
+                match target {
+                    None => {
+                        let mut ctx = FunctionContext::new(name.clone(), None, ctx, args.clone());
+                        func.call_with_context(&mut ctx)
                     }
-                } else {
-                    Err(ExecutionError::UnsupportedFunctionCallIdentifierType(
-                        (**name).clone(),
-                    ))
+                    Some(target) => {
+                        let mut ctx = FunctionContext::new(
+                            name.clone(),
+                            Some(Value::resolve(target, ctx)?),
+                            ctx,
+                            args.clone(),
+                        );
+                        func.call_with_context(&mut ctx)
+                    }
                 }
             }
         }

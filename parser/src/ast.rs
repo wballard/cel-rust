@@ -35,6 +35,7 @@ pub enum UnaryOp {
 /// Represents an expression in the abstract syntax tree (AST).
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expression {
+    // Boxed to support recursive expressions.
     Arithmetic(Box<Expression>, ArithmeticOp, Box<Expression>),
     Relation(Box<Expression>, RelationOp, Box<Expression>),
     Ternary(Box<Expression>, Box<Expression>, Box<Expression>),
@@ -42,7 +43,7 @@ pub enum Expression {
     And(Box<Expression>, Box<Expression>),
     Unary(UnaryOp, Box<Expression>),
     Member(Box<Expression>, Box<Member>),
-    FunctionCall(Box<Expression>, Option<Box<Expression>>, Vec<Expression>),
+    FunctionCall(Identifier, Option<Box<Expression>>, Vec<Expression>),
     List(Vec<Expression>),
     Atom(Atom),
     Ident(Identifier),
@@ -224,9 +225,7 @@ impl Expression {
                 e._references(variables, functions);
             }
             Expression::FunctionCall(name, target, args) => {
-                if let Expression::Ident(v) = &**name {
-                    functions.insert(v);
-                }
+                functions.insert(name);
                 if let Some(target) = target {
                     target._references(variables, functions);
                 }

@@ -169,14 +169,14 @@ impl From<Identifier> for String {
 pub fn parse_identifier<'a>() -> impl Parser<'a, &'a str, Identifier, extra::Err<Rich<'a, char>>> {
     // start with a Unicode Identifier Start character or an emoji
     // but not any of our punctuation characters that get used as sigils and operators
-    let body_pattern = r"[\p{XID_Start}\p{Emoji}&&[^\p{Po}\p{Punct}]][\p{XID_Continue}\p{Emoji}]*";
+    let body_pattern = r"[\p{XID_Start}\p{Emoji}&&[^\p{Po}\p{Punct}\d]][\p{XID_Continue}\p{Emoji}&&[^\p{Po}\p{Punct}]]*";
     regex(body_pattern).map(|s: &str| s.into())
 }
 
 /// Parase additional identifiers that contain no numbers.
-/// 
+///
 /// Example:
-/// 
+///
 ///  
 /// ```rust
 /// use cel_parser::identifiers::parse_non_numeric_identifier;
@@ -191,9 +191,10 @@ pub fn parse_identifier<'a>() -> impl Parser<'a, &'a str, Identifier, extra::Err
 /// assert_eq!(identifier_m.to_string(), "m");
 /// assert_eq!(identifier_s.to_string(), "s");
 /// ```
-pub fn parse_non_numeric_identifier<'a>() -> impl Parser<'a, &'a str, Identifier, extra::Err<Rich<'a, char>>> {
+pub fn parse_non_numeric_identifier<'a>(
+) -> impl Parser<'a, &'a str, Identifier, extra::Err<Rich<'a, char>>> {
     // start with a Unicode Identifier Start character or an emoji
     // but not any of our punctuation characters that get used as sigils and operators
-    let body_pattern = r"[\p{XID_Start}\p{Emoji}&&[^\p{Po}\p{Punct}\d]][\p{XID_Continue}\p{Emoji}&&[^\d]]*";
+    let body_pattern = r"[\p{XID_Start}\p{Emoji}&&[^\p{Po}\p{Punct}\d]][\p{XID_Continue}\p{Emoji}&&[^\p{Po}\p{Punct}\d]]]*";
     regex(body_pattern).map(|s: &str| s.into())
 }
