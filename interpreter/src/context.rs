@@ -145,6 +145,7 @@ impl<'a> Default for Context<'a> {
         ctx.add_function("startsWith", functions::starts_with);
         ctx.add_function("endsWith", functions::ends_with);
         ctx.add_function("string", functions::string);
+        ctx.add_function("to_string", functions::string);
         ctx.add_function("exists", functions::exists);
         ctx.add_function("exists_one", functions::exists_one);
 

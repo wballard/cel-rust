@@ -11,6 +11,7 @@ pub fn parse_relation_op<'a>() -> impl Parser<'a, &'a str, RelationOp, extra::Er
         op("==").map(|_| RelationOp::Equals),
         op("!=").map(|_| RelationOp::NotEquals),
         op("in").map(|_| RelationOp::In),
+        op(".").map(|_| RelationOp::MemberOf),
     ))
 }
 

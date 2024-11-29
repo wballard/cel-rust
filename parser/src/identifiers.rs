@@ -1,6 +1,7 @@
 use chumsky::prelude::*;
 use std::fmt;
 use ulid::Ulid;
+use chumsky::Parser;
 
 /// Parses a ULID (Universally Unique Lexicographically Sortable Identifier) from a string slice.
 ///
@@ -146,6 +147,16 @@ impl From<Identifier> for String {
 
 /// Parses an identifier from a string slice.
 ///
+/// Identifiers include:
+/// * Unicode Identifier characters
+/// * emoji
+/// * _
+///
+/// *but not digits or punctuation*.
+///
+/// Digits are excluded to allow for `units` parsing such as `15m` to be parsed
+/// as a `Measure` instead of an `Identifier`.
+///
 /// Example:
 ///
 /// ```rust
@@ -155,46 +166,35 @@ impl From<Identifier> for String {
 /// let identifier_with_emoji = parse_identifier().parse("rust_🦀").unwrap();
 /// assert_eq!(identifier_with_emoji, "rust_🦀".into());
 ///
-/// let identifier_without_emoji = parse_identifier().parse("rust_lang").unwrap();
-/// assert_eq!(identifier_without_emoji, "rust_lang".into());
 ///
-/// let identifier_is_emoji = parse_identifier().parse("🦃").unwrap();
-/// assert_eq!(identifier_is_emoji, "🦃".into());
-///
-/// assert_eq!(identifier_with_emoji.to_string(), "rust_🦀");
-/// assert_eq!(identifier_without_emoji.to_string(), "rust_lang");
-/// assert_eq!(identifier_is_emoji.to_string(), "🦃");
 /// ```
 ///
 pub fn parse_identifier<'a>() -> impl Parser<'a, &'a str, Identifier, extra::Err<Rich<'a, char>>> {
     // start with a Unicode Identifier Start character or an emoji
     // but not any of our punctuation characters that get used as sigils and operators
-    let body_pattern = r"[\p{XID_Start}\p{Emoji}&&[^\p{Po}\p{Punct}\d]][\p{XID_Continue}\p{Emoji}&&[^\p{Po}\p{Punct}]]*";
+    let body_pattern = r"[\p{ID_Start}\p{Emoji}_&&[^\d]][\p{XID_Continue}\p{Emoji}_&&[^\d]]*";
     regex(body_pattern).map(|s: &str| s.into())
 }
 
-/// Parase additional identifiers that contain no numbers.
-///
-/// Example:
-///
-///  
-/// ```rust
-/// use cel_parser::identifiers::parse_non_numeric_identifier;
-/// use chumsky::Parser;
-///
-/// let identifier_m = parse_non_numeric_identifier().parse("m").unwrap();
-/// assert_eq!(identifier_m, "m".into());
-///
-/// let identifier_s = parse_non_numeric_identifier().parse("s").unwrap();
-/// assert_eq!(identifier_s, "s".into());
-///
-/// assert_eq!(identifier_m.to_string(), "m");
-/// assert_eq!(identifier_s.to_string(), "s");
-/// ```
-pub fn parse_non_numeric_identifier<'a>(
-) -> impl Parser<'a, &'a str, Identifier, extra::Err<Rich<'a, char>>> {
-    // start with a Unicode Identifier Start character or an emoji
-    // but not any of our punctuation characters that get used as sigils and operators
-    let body_pattern = r"[\p{XID_Start}\p{Emoji}&&[^\p{Po}\p{Punct}\d]][\p{XID_Continue}\p{Emoji}&&[^\p{Po}\p{Punct}\d]]]*";
-    regex(body_pattern).map(|s: &str| s.into())
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case("rust_🦀", "rust_🦀".into())]
+    #[case("rust_lang", "rust_lang".into())]
+    #[case("🦃", "🦃".into())]
+    #[case("_🦃_", "_🦃_".into())]
+    fn identifier(#[case] input: &str, #[case] expected: Identifier) {
+        let result = parse_identifier().parse(input).unwrap();
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn identifier_with_digits_fails() {
+        let result = parse_identifier().parse("rust123");
+        assert!(result.has_errors());
+    }
 }

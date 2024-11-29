@@ -73,7 +73,7 @@ impl fmt::Display for Measure {
 /// ```
 pub fn parse_measure<'a>() -> impl Parser<'a, &'a str, Measure, extra::Err<Rich<'a, char>>> {
     parse_number()
-        .then(parse_non_numeric_identifier())
+        .then(parse_identifier())
         .map(|(number, identifier)| Measure {
             number,
             unit: identifier.into(),

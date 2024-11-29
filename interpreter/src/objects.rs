@@ -434,6 +434,9 @@ impl<'a> Value {
                         //TODO: implement for TagSet
                         (left, right) => Err(ExecutionError::ValuesNotComparable(left, right))?,
                     },
+                    RelationOp::MemberOf => match (left, right) {
+                        _ => unimplemented!(),
+                    },
                 };
                 Value::Bool(res).into()
             }
@@ -478,6 +481,13 @@ impl<'a> Value {
                 left.member(right, ctx)
             }
             Expression::List(items) => {
+                let list = items
+                    .iter()
+                    .map(|i| Value::resolve(i, ctx))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Value::List(list.into()).into()
+            }
+            Expression::ArgumentList(items) => {
                 let list = items
                     .iter()
                     .map(|i| Value::resolve(i, ctx))
@@ -552,9 +562,6 @@ impl<'a> Value {
                     (value, index) => Err(ExecutionError::UnsupportedIndex(value, index)),
                 }
             }
-            Member::Fields(_) => Err(ExecutionError::UnsupportedFieldsConstruction(
-                member.clone(),
-            )),
             Member::Attribute(name) => {
                 !unimplemented!()
 

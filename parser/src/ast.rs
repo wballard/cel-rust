@@ -1,5 +1,44 @@
 use crate::identifiers::*;
-use std::collections::HashSet;
+use std::fmt::*;
+use std::{collections::HashSet, fmt::Formatter};
+
+/// Turn the raw text into workable tokens.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub enum Token {
+    Atom(Atom),
+    Parens(Vec<Token>),
+    Brackets(Vec<Token>),
+    Braces(Vec<Token>),
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Token::Atom(atom) => write!(f, "{}", atom),
+            Token::Parens(tokens) => {
+                write!(f, "(")?;
+                for token in tokens {
+                    write!(f, "{}", token)?;
+                }
+                write!(f, ")")
+            }
+            Token::Brackets(tokens) => {
+                write!(f, "[")?;
+                for token in tokens {
+                    write!(f, "{}", token)?;
+                }
+                write!(f, "]")
+            }
+            Token::Braces(tokens) => {
+                write!(f, "{{")?;
+                for token in tokens {
+                    write!(f, "{}", token)?;
+                }
+                write!(f, "}}")
+            }
+        }
+    }
+}
 
 /// Represents a relational operator in an expression.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -11,6 +50,7 @@ pub enum RelationOp {
     Equals,
     NotEquals,
     In,
+    MemberOf,
 }
 
 /// Represents an arithmetic operator in an expression.
@@ -45,6 +85,7 @@ pub enum Expression {
     Member(Box<Expression>, Box<Member>),
     FunctionCall(Identifier, Option<Box<Expression>>, Vec<Expression>),
     List(Vec<Expression>),
+    ArgumentList(Vec<Expression>),
     Atom(Atom),
     Ident(Identifier),
     TagSet(Vec<Expression>),
@@ -55,7 +96,6 @@ pub enum Expression {
 pub enum Member {
     Attribute(Identifier),
     Index(Box<Expression>),
-    Fields(Vec<(String, Expression)>),
 }
 
 /// Represents an atomic value in an expression.
@@ -69,6 +109,21 @@ pub enum Atom {
     DateTime(chrono::DateTime<chrono::Utc>),
     Duration(chrono::Duration),
     HashTag(HashTag),
+}
+
+impl Display for Atom {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Atom::Number(n) => write!(f, "{}", n),
+            Atom::String(s) => write!(f, "\"{}\"", s),
+            Atom::Bool(b) => write!(f, "{}", b),
+            Atom::Null => write!(f, "null"),
+            Atom::Ulid(u) => write!(f, "{}", u),
+            Atom::DateTime(d) => write!(f, "{}", d),
+            Atom::Duration(d) => write!(f, "{}", d),
+            Atom::HashTag(h) => write!(f, "{}", h),
+        }
+    }
 }
 
 impl From<ulid::Ulid> for Atom {
@@ -239,6 +294,11 @@ impl Expression {
                 }
             }
             Expression::TagSet(e) => {
+                for e in e {
+                    e._references(variables, functions);
+                }
+            }
+            Expression::ArgumentList(e) => {
                 for e in e {
                     e._references(variables, functions);
                 }
