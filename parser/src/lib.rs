@@ -1,3 +1,4 @@
+use chumsky::pratt::*;
 use chumsky::prelude::*;
 
 pub mod error;
@@ -33,11 +34,26 @@ pub use operators::*;
 /// println!("{:?}", expr);
 /// ```
 pub fn parse(input: &str) -> Result<Expression, ParseErrors> {
-    let (expression, errors) = parse_expression().parse(input).into_output_errors();
+    // get the raw text turned into tokens -- then we can work with some structure
+    let (tokens, errors) = parse_tokens().parse(input).into_output_errors();
     if errors.is_empty() {
-        Ok(expression.unwrap())
+        match tokens {
+            Some(tokens) => {
+                //println!("{:?}", tokens);
+                let (expr, errors) = parse_expression().parse(&tokens).into_output_errors();
+                if errors.is_empty() {
+                    Ok(expr.unwrap())
+                } else {
+                    Err(ParseErrors::from_parser(errors))
+                }
+            }
+            None => {
+                // no tokens, so this is false-y
+                Ok(Expression::Atom(Atom::Bool(false)))
+            }
+        }
     } else {
-        Err(ParseErrors::from_chumsky(errors))
+        Err(ParseErrors::from_text(errors))
     }
 }
 
@@ -46,51 +62,89 @@ fn parse_atom<'a>() -> impl Parser<'a, &'a str, Atom, extra::Err<Rich<'a, char>>
     choice((
         // keyword and constant atoms go first
         parse_bool().map(Atom::Bool),
+        parse_ulid().map(Atom::Ulid),
+        parse_duration().map(Atom::Duration),
         // dates ahead of numbers, otherwise they can look like minus expressions
         parse_datetime().map(Atom::DateTime),
-        parse_duration().map(Atom::Duration),
         parse_number().map(Atom::Number),
-        parse_string().map(Atom::String),
-        parse_ulid().map(Atom::Ulid),
         parse_hashtag().map(Atom::HashTag),
+        parse_string().map(Atom::String),
     ))
 }
 
-fn parse_expression<'a>() -> impl Parser<'a, &'a str, Expression, extra::Err<Rich<'a, char>>> {
-    // building blocks -- these are boxed to allow cloning to comply with the recursive parser
-    let atom = parse_atom().map(Expression::Atom).boxed();
+fn parse_tokens<'a>() -> impl Parser<'a, &'a str, Vec<Token>, extra::Err<Rich<'a, char>>> {
+    recursive(|token| {
+        choice((
+            // parens
+            token
+                .clone()
+                .repeated()
+                .collect()
+                .delimited_by(just('('), just(')'))
+                .map(Token::Parens),
+            token
+                .clone()
+                .repeated()
+                .collect()
+                .delimited_by(just('['), just(']'))
+                .map(Token::Brackets),
+            // the basic atoms
+            parse_atom().boxed().map(Token::Atom),
+        ))
+        .padded()
+    })
+    .repeated()
+    .collect()
+}
+
+fn parse_expression<'a>() -> impl Parser<'a, &'a [Token], Expression, extra::Err<Rich<'a, Token>>> {
+    recursive(|expression| {
+        choice((
+            // token cases
+            select! { Token::Atom(x) => Expression::Atom(x) },
+            expression.nested_in(select_ref! { Token::Brackets(x) => x.as_slice() }),
+        ))
+    })
+    /*
     let identifier = parse_identifier().map(Expression::Ident).boxed();
 
     // and this is the expression recursive parser
     recursive(|expression| {
-        let list = expression
+        let expression_list = expression
             .clone()
             .separated_by(just(','))
             .allow_trailing()
-            .collect()
+            .collect();
+        let list = expression_list
+            .clone()
             .delimited_by(just('['), just(']'))
             .map(Expression::List);
-        let argument_list = expression
+        let argument_list = expression_list
             .clone()
-            .separated_by(just(','))
-            .allow_trailing()
-            .collect()
-            .delimited_by(just('('), just(')'));
-        let function_call = parse_identifier()
-            .boxed()
+            .delimited_by(just('('), just(')'))
+            .map(Expression::ArgumentList);
+        let tagset = expression_list
             .clone()
-            .then(argument_list.clone())
-            .map(|(name, args)| Expression::FunctionCall(name, None, args));
-        let tagset = expression
-            .clone()
-            .separated_by(just(','))
-            .allow_trailing()
-            .collect()
             .delimited_by(just('{'), just('}'))
             .map(Expression::TagSet);
-        // atom comes first to pick up keywords
-        choice((function_call, atom, identifier, list, tagset)).padded()
+
+        //choice((function_call, atom, identifier, list, tagset)).padded()
+        // starting from the 'left' -- an expression will have an initial atom or identifier
+        //let operand = choice((atom, identifier, list, argument_list, tagset)).padded();
+        let operand = choice((atom, list)).padded();
+
+        let p = operand
+            .pratt(vec![
+                //unary operators
+                prefix(10, just('!'), |_, e| {
+                    Ok(Expression::Unary(UnaryOp::Not, Box::new(e)))
+                }),
+            ])
+            .clone();
+
+        operand
     })
+    */
 }
 
 #[cfg(test)]
@@ -167,7 +221,35 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_map_macro() {
+    fn argument_list() {
+        assert_parse_eq(
+            "(1, 2, 3)",
+            ArgumentList(vec![
+                Atom(Number(dec!(1))),
+                Atom(Number(dec!(2))),
+                Atom(Number(dec!(3))),
+            ]),
+        )
+    }
+
+    #[test]
+    fn list_to_string() {
+        assert_parse_eq(
+            "[1, 2, 3].string()",
+            FunctionCall(
+                "string".into(),
+                Some(Box::new(List(vec![
+                    Atom(Number(dec!(1))),
+                    Atom(Number(dec!(2))),
+                    Atom(Number(dec!(3))),
+                ]))),
+                vec![],
+            ),
+        )
+    }
+
+    #[test]
+    fn map_list_constant() {
         assert_parse_eq(
             "[1, 2, 3].map(x, x * 2)",
             FunctionCall(
@@ -359,7 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn binary_product_expressions() {
+    fn sbinary_product_expressions() {
         assert_parse_eq(
             "2 * 3",
             Arithmetic(
