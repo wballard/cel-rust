@@ -37,7 +37,7 @@ pub fn parse(input: &str) -> Result<Expression, ParseErrors> {
     if errors.is_empty() {
         Ok(expression.unwrap())
     } else {
-        Err(ParseErrors::from_chumsky(errors))
+        Err(ParseErrors::from_text(errors))
     }
 }
 
