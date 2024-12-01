@@ -91,8 +91,6 @@ where
 
     recursive(|expression| {
         choice((
-            // empty expression at end of sequence, this us used to delimit lists
-            end().map(|_| Expression::Empty),
             // calls are a function name followed by a list of arguments
             identifier
                 .then(expression.clone())
@@ -100,12 +98,20 @@ where
                     Expression::Identifier(name) => match right {
                         // identifier and a tuple? -- that's a function call
                         Expression::Tuple(args) => Expression::FunctionCall(name, None, args),
-                        _ => unreachable!(),
+
+                        _ => {
+                            print!("hi {:?}", right);
+                            unreachable!()
+                        }
                     },
                     _ => unreachable!(),
                 }),
             // simple atoms
             atoms,
+            // empty nests
+            just(Token::Parens(vec![])).map(|_| Expression::Tuple(vec![])),
+            just(Token::Braces(vec![])).map(|_| Expression::Set(vec![])),
+            just(Token::Brackets(vec![])).map(|_| Expression::List(vec![])),
             // compound nests
             // picking out the nested multiples and use them as members
             // empty expression ... empty nest
@@ -117,7 +123,6 @@ where
                 }})
                 .map(|nested| match nested {
                     Expression::Multiple(exprs) => Expression::List(exprs),
-                    Expression::Empty => Expression::List(vec![]),
                     any => Expression::List(vec![any]),
                 }),
             expression
@@ -127,7 +132,6 @@ where
                 }})
                 .map(|nested| match nested {
                     Expression::Multiple(exprs) => Expression::Tuple(exprs),
-                    Expression::Empty => Expression::Tuple(vec![]),
                     any => Expression::Tuple(vec![any]),
                 }),
             expression
@@ -137,7 +141,6 @@ where
                 }})
                 .map(|nested| match nested {
                     Expression::Multiple(exprs) => Expression::Set(exprs),
-                    Expression::Empty => Expression::Set(vec![]),
                     any => Expression::Set(vec![any]),
                 }),
         ))
@@ -406,9 +409,12 @@ mod tests {
     }
     */
 
-    #[test]
-    fn function_call_no_args() {
-        assert_parse_eq("a()", FunctionCall("a".into(), None, vec![]));
+    #[rstest]
+    #[case("a()", FunctionCall("a".into(), None, vec![]))]
+    #[case("a(1)", FunctionCall("a".into(), None, vec![Atom(Number(dec!(1)))]))]
+    #[case("a(x)", FunctionCall("a".into(), None, vec![Identifier("x".into())]))]
+    fn function_call(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
     #[rstest]
