@@ -2,8 +2,8 @@ pub use crate::atoms::*;
 pub use crate::operators::*;
 use chumsky::extra;
 use chumsky::input::BorrowInput;
-use chumsky::input::ValueInput;
 use chumsky::prelude::*;
+use chumsky::Parser;
 
 use std::fmt::*;
 
@@ -99,9 +99,102 @@ pub fn lexer<'a>() -> impl Parser<'a, &'a str, Vec<Spanned<Token>>, extra::Err<R
 }
 
 // Convert a slice of tokens into a spanned value input.
-pub fn make_input<'src>(
+pub fn make_input(
     eoi: SimpleSpan,
-    toks: &'src [Spanned<Token>],
-) -> impl BorrowInput<'src, Token = Token, Span = SimpleSpan> {
+    toks: &[Spanned<Token>],
+) -> impl BorrowInput<Token = Token, Span = SimpleSpan> {
     toks.spanned(eoi)
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_tuple() {
+        let input = "()";
+        let result = lexer().parse(input).into_result();
+        assert!(result.is_ok());
+        let tokens = result.unwrap();
+        assert_eq!(tokens.len(), 1);
+        match &tokens[0].0 {
+            Token::Parens(inner_tokens) => assert!(inner_tokens.is_empty()),
+            _ => panic!("Expected Token::Parens"),
+        }
+    }
+
+    #[test]
+    fn empty_brackets() {
+        let input = "[]";
+        let result = lexer().parse(input).into_result();
+        assert!(result.is_ok());
+        let tokens = result.unwrap();
+        assert_eq!(tokens.len(), 1);
+        match &tokens[0].0 {
+            Token::Brackets(inner_tokens) => assert!(inner_tokens.is_empty()),
+            _ => panic!("Expected Token::Brackets"),
+        }
+    }
+
+    #[test]
+    fn empty_braces() {
+        let input = "{}";
+        let result = lexer().parse(input).into_result();
+        assert!(result.is_ok());
+        let tokens = result.unwrap();
+        assert_eq!(tokens.len(), 1);
+        match &tokens[0].0 {
+            Token::Braces(inner_tokens) => assert!(inner_tokens.is_empty()),
+            _ => panic!("Expected Token::Braces"),
+        }
+    }
+
+    #[test]
+    fn separator() {
+        let input = ",";
+        let result = lexer().parse(input).into_result();
+        assert!(result.is_ok());
+        let tokens = result.unwrap();
+        assert_eq!(tokens.len(), 1);
+        match &tokens[0].0 {
+            Token::Separator => (),
+            _ => panic!("Expected Token::Separator"),
+        }
+    }
+
+    #[test]
+    fn identifier_with_parens() {
+        let input = "foo()";
+        let result = lexer().parse(input).into_result();
+        assert!(result.is_ok());
+        let tokens = result.unwrap();
+        assert_eq!(tokens.len(), 2);
+        match &tokens[0].0 {
+            Token::Identifier(id) => assert_eq!(id.to_string(), "foo"),
+            _ => panic!("Expected Token::Identifier"),
+        }
+        match &tokens[1].0 {
+            Token::Parens(inner_tokens) => assert!(inner_tokens.is_empty()),
+            _ => panic!("Expected Token::Parens"),
+        }
+    }
+
+    #[test]
+    fn member_call() {
+        let input = "foo.goo()";
+        let result = lexer().parse(input).into_result();
+        assert!(result.is_ok());
+        let tokens = result.unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                (Token::Identifier("foo".into()), SimpleSpan::new(0, 3)),
+                (
+                    Token::Operator(Operator::Relation(RelationOp::GetMember)),
+                    SimpleSpan::new(3, 4)
+                ),
+                (Token::Identifier("goo".into()), SimpleSpan::new(4, 7)),
+                (Token::Parens(vec![]), SimpleSpan::new(7, 9)),
+            ]
+        );
+    }
 }

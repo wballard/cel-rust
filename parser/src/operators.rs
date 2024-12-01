@@ -12,7 +12,7 @@ pub enum RelationOp {
     Equals,
     NotEquals,
     In,
-    MemberOf,
+    GetMember,
 }
 
 /// Represents an arithmetic operator in an expression.
@@ -52,7 +52,7 @@ pub fn parse_relation_op<'a>() -> impl Parser<'a, &'a str, RelationOp, extra::Er
         op("==").map(|_| RelationOp::Equals),
         op("!=").map(|_| RelationOp::NotEquals),
         op("in").map(|_| RelationOp::In),
-        op(".").map(|_| RelationOp::MemberOf),
+        op(".").map(|_| RelationOp::GetMember),
     ))
 }
 

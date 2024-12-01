@@ -1,6 +1,4 @@
 use chumsky::input::BorrowInput;
-use chumsky::input::Input;
-use chumsky::input::ValueInput;
 use chumsky::pratt::*;
 use chumsky::prelude::*;
 
@@ -86,7 +84,9 @@ where
     M: Fn(SimpleSpan, &'src [Spanned<Token>]) -> I + 'src + Copy,
 {
     let atom = select_ref! { Token::Atom(x) => Expression::Atom(x.clone()) };
-    let identifier = select_ref! { Token::Identifier(x) => Expression::Identifier(x.clone()) };
+    let identifier = select_ref! { Token::Identifier(x) => {
+        Expression::Identifier(x.clone())
+    }};
     let atoms = choice((identifier, atom));
 
     recursive(|expression| {
@@ -157,6 +157,18 @@ where
                     Expression::Binary(
                         Box::new(left),
                         Operator::Logical(LogicalOp::And),
+                        Box::new(right),
+                    )
+                },
+            ),
+            // relation operators
+            infix(
+                left(200),
+                just(Token::Operator(Operator::Relation(RelationOp::GetMember))),
+                |left, right| {
+                    Expression::Binary(
+                        Box::new(left),
+                        Operator::Relation(RelationOp::GetMember),
                         Box::new(right),
                     )
                 },
