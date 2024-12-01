@@ -177,12 +177,23 @@ where
             ),
             // relation operators
             infix(
-                left(200),
+                left(290),
                 just(Token::Operator(Operator::Relation(RelationOp::GetMember))),
                 |left, right| {
                     Expression::Binary(
                         Box::new(left),
                         Operator::Relation(RelationOp::GetMember),
+                        Box::new(right),
+                    )
+                },
+            ),
+            infix(
+                left(280),
+                just(Token::Operator(Operator::Relation(RelationOp::In))),
+                |left, right| {
+                    Expression::Binary(
+                        Box::new(left),
+                        Operator::Relation(RelationOp::In),
                         Box::new(right),
                     )
                 },
@@ -514,16 +525,24 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_in_list_relation() {
-        assert_parse_eq(
-            "2 in [2]",
-            Binary(
-                Box::new(Expression::Atom(Number(dec!(2)))),
-                Operator::Relation(RelationOp::In),
-                Box::new(List(vec![Expression::Atom(Number(dec!(2)))])),
-            ),
-        );
+    #[rstest]
+    #[case("2 in [2]", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Relation(RelationOp::In),
+        Box::new(List(vec![Expression::Atom(Number(dec!(2)))])),
+    ))]
+    #[case("2 in {2}", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Relation(RelationOp::In),
+        Box::new(Set(vec![Expression::Atom(Number(dec!(2)))])),
+    ))]
+    #[case("2 in (2)", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Relation(RelationOp::In),
+        Box::new(Tuple(vec![Expression::Atom(Number(dec!(2)))])),
+    ))]
+    fn in_relation(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
     #[test]
