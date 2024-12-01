@@ -69,6 +69,8 @@ pub fn parse_expression<'a>(
     let atoms = choice((identifier, atom));
     recursive(|expression| {
         choice((
+            // empty expression at end of sequence, this us used to delimit lists
+            end().map(|_| Expression::Empty),
             // simple atoms
             atoms,
             // compound nests
@@ -84,6 +86,7 @@ pub fn parse_expression<'a>(
                 .map(|nested| match nested {
                     // picking out the nested expressions and turning them into a list
                     Expression::Multiple(exprs) => Expression::List(exprs),
+                    Expression::Empty => Expression::List(vec![]),
                     // this is a sensible default -- any single item just becomes a list
                     any => Expression::List(vec![any]),
                 }),
@@ -230,6 +233,8 @@ mod tests {
     }
 
     #[rstest]
+    #[case("[]", List(vec![
+    ]))]
     #[case("[1]", List(vec![
         Atom(Number(dec!(1))),
     ]))]
@@ -368,23 +373,6 @@ mod tests {
                     Box::new(Expression::Atom(Bool(true))),
                 )),
             ),
-        );
-    }
-
-    #[test]
-    fn test_empty_list_parsing() {
-        assert_parse_eq("[]", List(vec![]));
-    }
-
-    #[test]
-    fn test_int_list_parsing() {
-        assert_parse_eq(
-            "[1,2,3]",
-            List(vec![
-                Expression::Atom(Number(dec!(1))),
-                Expression::Atom(Number(dec!(2))),
-                Expression::Atom(Number(dec!(3))),
-            ]),
         );
     }
 
