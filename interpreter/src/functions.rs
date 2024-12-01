@@ -75,7 +75,7 @@ impl<'context> FunctionContext<'context> {
 pub fn size(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
     let size = match this {
         Value::List(l) => l.list.len(),
-        Value::TagSet(t) => t.set.len(),
+        Value::Set(t) => t.set.len(),
         Value::String(s) => s.len(),
         Value::HashTag(h) => h.as_ref().len(),
         Value::Number(_) => 1,

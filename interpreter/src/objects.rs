@@ -49,7 +49,8 @@ impl From<Vec<HashTag>> for ValueSet {
 #[derive(Debug, Clone)]
 pub enum Value {
     List(ValueList),
-    TagSet(ValueSet),
+    Tuple(ValueList),
+    Set(ValueSet),
 
     Function(Identifier, Option<Box<Value>>),
 
@@ -69,6 +70,7 @@ pub enum Value {
 #[derive(Clone, Copy, Debug)]
 pub enum ValueType {
     List,
+    Tuple,
     Function,
     Number,
     String,
@@ -86,7 +88,8 @@ impl Display for ValueType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ValueType::List => write!(f, "list"),
-            ValueType::TagSet => write!(f, "tagset"),
+            ValueType::Tuple => write!(f, "tuple"),
+            ValueType::TagSet => write!(f, "set"),
             ValueType::Function => write!(f, "function"),
             ValueType::Number => write!(f, "number"),
             ValueType::String => write!(f, "string"),
@@ -105,6 +108,7 @@ impl Value {
     pub fn type_of(&self) -> ValueType {
         match self {
             Value::List(_) => ValueType::List,
+            Value::Tuple(_) => ValueType::Tuple,
             Value::Function(_, _) => ValueType::Function,
             Value::Number(_) => ValueType::Number,
             Value::String(_) => ValueType::String,
@@ -115,7 +119,7 @@ impl Value {
             Value::Null => ValueType::Null,
             Value::Ulid(_) => ValueType::Ulid,
             Value::HashTag(_) => ValueType::Tag,
-            Value::TagSet(_) => ValueType::TagSet,
+            Value::Set(_) => ValueType::TagSet,
         }
     }
 
@@ -140,6 +144,16 @@ impl Display for Value {
                 }
                 write!(f, "]")
             }
+            Value::Tuple(v) => {
+                write!(f, "(")?;
+                for (i, v) in v.list.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", v)?;
+                }
+                write!(f, "(")
+            }
             Value::Function(name, target) => match target {
                 Some(target) => write!(f, "{}.{}", target, name),
                 None => write!(f, "{}", name),
@@ -157,7 +171,7 @@ impl Display for Value {
             Value::Timestamp(v) => write!(f, "{}", v.to_rfc3339_opts(SecondsFormat::Millis, true)),
             Value::Ulid(v) => write!(f, "{}", v),
             Value::HashTag(v) => write!(f, "{}", v),
-            Value::TagSet(v) => {
+            Value::Set(v) => {
                 write!(f, "{{#")?;
                 for (i, v) in v.set.iter().enumerate() {
                     if i > 0 {
@@ -241,7 +255,7 @@ impl PartialEq for Value {
             (Value::Timestamp(a), Value::Timestamp(b)) => a == b,
             (Value::Ulid(a), Value::Ulid(b)) => a == b,
             (Value::HashTag(a), Value::HashTag(b)) => a == b,
-            (Value::TagSet(a), Value::TagSet(b)) => a == b,
+            (Value::Set(a), Value::Set(b)) => a == b,
             (_, _) => false,
         }
     }
@@ -253,6 +267,7 @@ impl std::hash::Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
             Value::List(list) => list.hash(state),
+            Value::Tuple(list) => list.hash(state),
             Value::Function(name, target) => {
                 name.hash(state);
                 target.hash(state);
@@ -268,7 +283,7 @@ impl std::hash::Hash for Value {
             Value::Timestamp(v) => v.hash(state),
             Value::Ulid(v) => v.hash(state),
             Value::HashTag(v) => v.hash(state),
-            Value::TagSet(v) => v.hash(state),
+            Value::Set(v) => v.hash(state),
         }
     }
 }
@@ -490,14 +505,14 @@ impl<'a> Value {
                     .collect::<Result<Vec<_>, _>>()?;
                 Value::List(list.into()).into()
             }
-            Expression::ArgumentList(items) => {
+            Expression::Tuple(items) => {
                 let list = items
                     .iter()
                     .map(|i| Value::resolve(i, ctx))
                     .collect::<Result<Vec<_>, _>>()?;
-                Value::List(list.into()).into()
+                Value::Tuple(list.into()).into()
             }
-            Expression::TagSet(items) => {
+            Expression::Set(items) => {
                 // reduce the expressions to a list of tag values
                 let list: Vec<_> = items
                     .iter()
@@ -508,7 +523,7 @@ impl<'a> Value {
                         _ => None,
                     })
                     .collect();
-                Value::TagSet(list.into()).into()
+                Value::Set(list.into()).into()
             }
             Expression::Identifier(name) => ctx.get_variable(name),
             Expression::FunctionCall(name, target, args) => {
@@ -587,7 +602,8 @@ impl<'a> Value {
     fn to_bool(&self) -> bool {
         match self {
             Value::List(v) => !v.list.is_empty(),
-            Value::TagSet(v) => !v.set.is_empty(),
+            Value::Tuple(v) => !v.list.is_empty(),
+            Value::Set(v) => !v.set.is_empty(),
             Value::Number(v) => *v != dec!(0),
             Value::String(v) => !v.is_empty(),
             Value::Bytes(v) => !v.is_empty(),
@@ -942,7 +958,7 @@ mod tests {
         let result = program.execute(&context);
         assert_eq!(
             result.unwrap(),
-            Value::TagSet(
+            Value::Set(
                 vec![
                     Value::HashTag("1".into()),
                     Value::HashTag("2".into()),
@@ -960,7 +976,7 @@ mod tests {
         let result = program.execute(&context);
         assert_eq!(
             result.unwrap(),
-            Value::TagSet(
+            Value::Set(
                 vec![
                     Value::HashTag("one".into()),
                     Value::HashTag("two".into()),

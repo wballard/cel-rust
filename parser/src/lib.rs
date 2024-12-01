@@ -67,16 +67,28 @@ pub fn parse(input: &str) -> Result<Expression, ParseErrors> {
     }
 }
 
+/// We want to forgive trailing commas to have a friendly syntax.
+fn trim_trailing_separator(ts: &Vec<(Token, SimpleSpan)>) -> &[(Token, SimpleSpan)] {
+    match ts.last() {
+        Some((Token::Separator, _)) => {
+            let trim = ts.split_last().unwrap().1;
+            trim
+        }
+        _ => ts,
+    }
+}
+
 pub fn parse_expression<'src, I, M>(
     make_input: M,
 ) -> impl Parser<'src, I, Expression, extra::Err<Rich<'src, Token>>>
 where
     I: BorrowInput<'src, Token = Token, Span = SimpleSpan>,
-    M: Fn(SimpleSpan, &'src [Spanned<Token>]) -> I + Clone + 'src,
+    M: Fn(SimpleSpan, &'src [Spanned<Token>]) -> I + 'src + Copy,
 {
     let atom = select_ref! { Token::Atom(x) => Expression::Atom(x.clone()) };
     let identifier = select_ref! { Token::Identifier(x) => Expression::Identifier(x.clone()) };
     let atoms = choice((identifier, atom));
+
     recursive(|expression| {
         choice((
             // empty expression at end of sequence, this us used to delimit lists
@@ -84,23 +96,38 @@ where
             // simple atoms
             atoms,
             // compound nests
+            // picking out the nested multiples and use them as members
+            // empty expression ... empty nest
+            // default to a single element nest for singulars
             expression
+                .clone()
                 .nested_in(select_ref! { Token::Brackets(ts) = e => {
-                    // eat trailing separators
-                    match ts.last() {
-                        Some((Token::Separator, _)) => {
-                                    let trim = ts.split_last().unwrap().1;
-                                    make_input(e.span(), trim)
-                                }
-                        _ => make_input(e.span(), ts)
-                    }
+                    make_input(e.span(), trim_trailing_separator(ts))
                 }})
                 .map(|nested| match nested {
-                    // picking out the nested expressions and turning them into a list
                     Expression::Multiple(exprs) => Expression::List(exprs),
                     Expression::Empty => Expression::List(vec![]),
-                    // this is a sensible default -- any single item just becomes a list
                     any => Expression::List(vec![any]),
+                }),
+            expression
+                .clone()
+                .nested_in(select_ref! { Token::Parens(ts) = e => {
+                    make_input(e.span(), trim_trailing_separator(ts))
+                }})
+                .map(|nested| match nested {
+                    Expression::Multiple(exprs) => Expression::Tuple(exprs),
+                    Expression::Empty => Expression::Tuple(vec![]),
+                    any => Expression::Tuple(vec![any]),
+                }),
+            expression
+                .clone()
+                .nested_in(select_ref! { Token::Braces(ts) = e => {
+                    make_input(e.span(), trim_trailing_separator(ts))
+                }})
+                .map(|nested| match nested {
+                    Expression::Multiple(exprs) => Expression::Set(exprs),
+                    Expression::Empty => Expression::Set(vec![]),
+                    any => Expression::Set(vec![any]),
                 }),
         ))
         .pratt((
@@ -265,22 +292,42 @@ mod tests {
     }
 
     #[rstest]
-    #[case("()", List(vec![
+    #[case("()", Tuple(vec![
     ]))]
-    #[case("(1)", List(vec![
+    #[case("(1)", Tuple(vec![
         Atom(Number(dec!(1))),
     ]))]
-    #[case("(1, 2, 3)", List(vec![
-        Atom(Number(dec!(1))),
-        Atom(Number(dec!(2))),
-        Atom(Number(dec!(3))),
-    ]))]
-    #[case("(1, 2, 3,)", List(vec![
+    #[case("(1, 2, 3)", Tuple(vec![
         Atom(Number(dec!(1))),
         Atom(Number(dec!(2))),
         Atom(Number(dec!(3))),
     ]))]
-    fn argument_list(#[case] input: &str, #[case] expected: Expression) {
+    #[case("(1, 2, 3,)", Tuple(vec![
+        Atom(Number(dec!(1))),
+        Atom(Number(dec!(2))),
+        Atom(Number(dec!(3))),
+    ]))]
+    fn tuple(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
+    }
+
+    #[rstest]
+    #[case("{}", Set(vec![
+    ]))]
+    #[case("{1}", Set(vec![
+        Atom(Number(dec!(1))),
+    ]))]
+    #[case("{1, 2, 3}", Set(vec![
+        Atom(Number(dec!(1))),
+        Atom(Number(dec!(2))),
+        Atom(Number(dec!(3))),
+    ]))]
+    #[case("{1, 2, 3,}", Set(vec![
+        Atom(Number(dec!(1))),
+        Atom(Number(dec!(2))),
+        Atom(Number(dec!(3))),
+    ]))]
+    fn set(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }
 
@@ -628,7 +675,7 @@ mod tests {
     fn test_tag_set() {
         assert_parse_eq(
             "{ #foo_bar, #💕 }",
-            TagSet(vec![
+            Set(vec![
                 Atom(HashTag("foo_bar".into())),
                 Atom(HashTag("💕".into())),
             ]),

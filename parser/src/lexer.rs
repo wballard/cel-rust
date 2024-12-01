@@ -77,6 +77,14 @@ pub fn lexer<'a>() -> impl Parser<'a, &'a str, Vec<Spanned<Token>>, extra::Err<R
                 .labelled("brackets")
                 .as_context()
                 .map(Token::Brackets),
+            token
+                .clone()
+                .repeated()
+                .collect()
+                .delimited_by(just('{'), just('}'))
+                .labelled("braces")
+                .as_context()
+                .map(Token::Braces),
             // the basic atoms
             just(',').map(|_| Token::Separator),
             parse_op().boxed().map(Token::Operator),

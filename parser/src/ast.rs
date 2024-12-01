@@ -12,10 +12,10 @@ pub enum Expression {
     Ternary(Box<Expression>, Box<Expression>, Box<Expression>),
     FunctionCall(Identifier, Option<Box<Expression>>, Vec<Expression>),
     List(Vec<Expression>),
-    ArgumentList(Vec<Expression>),
+    Tuple(Vec<Expression>),
+    Set(Vec<Expression>),
     Atom(Atom),
     Identifier(Identifier),
-    TagSet(Vec<Expression>),
     Multiple(Vec<Expression>),
     Empty,
 }
@@ -144,12 +144,12 @@ impl Expression {
                     e._references(variables, functions);
                 }
             }
-            Expression::TagSet(e) => {
+            Expression::Set(e) => {
                 for e in e {
                     e._references(variables, functions);
                 }
             }
-            Expression::ArgumentList(e) => {
+            Expression::Tuple(e) => {
                 for e in e {
                     e._references(variables, functions);
                 }
