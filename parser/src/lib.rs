@@ -1,3 +1,6 @@
+use chumsky::input::BorrowInput;
+use chumsky::input::Input;
+use chumsky::input::ValueInput;
 use chumsky::pratt::*;
 use chumsky::prelude::*;
 
@@ -45,7 +48,9 @@ pub fn parse(input: &str) -> Result<Expression, ParseErrors> {
     if errors.is_empty() {
         match tokens {
             Some(tokens) => {
-                let (expr, errors) = parse_expression().parse(&tokens).into_output_errors();
+                let (expr, errors) = parse_expression(make_input)
+                    .parse(make_input((0..tokens.len()).into(), &tokens))
+                    .into_output_errors();
                 if errors.is_empty() {
                     Ok(expr.unwrap())
                 } else {
@@ -62,10 +67,15 @@ pub fn parse(input: &str) -> Result<Expression, ParseErrors> {
     }
 }
 
-pub fn parse_expression<'a>(
-) -> impl Parser<'a, &'a [Token], Expression, extra::Err<Rich<'a, Token>>> {
-    let atom = select! { Token::Atom(x) => Expression::Atom(x) };
-    let identifier = select! { Token::Identifier(x) => Expression::Identifier(x) };
+pub fn parse_expression<'src, I, M>(
+    make_input: M,
+) -> impl Parser<'src, I, Expression, extra::Err<Rich<'src, Token>>>
+where
+    I: BorrowInput<'src, Token = Token, Span = SimpleSpan>,
+    M: Fn(SimpleSpan, &'src [Spanned<Token>]) -> I + Clone + 'src,
+{
+    let atom = select_ref! { Token::Atom(x) => Expression::Atom(x.clone()) };
+    let identifier = select_ref! { Token::Identifier(x) => Expression::Identifier(x.clone()) };
     let atoms = choice((identifier, atom));
     recursive(|expression| {
         choice((
@@ -75,12 +85,14 @@ pub fn parse_expression<'a>(
             atoms,
             // compound nests
             expression
-                .nested_in(select_ref! { Token::Brackets(ts) => {
+                .nested_in(select_ref! { Token::Brackets(ts) = e => {
                     // eat trailing separators
-                    if ts.last() == Some(&Token::Separator) {
-                        ts.split_last().unwrap().1
-                    } else {
-                        ts.as_slice()
+                    match ts.last() {
+                        Some((Token::Separator, _)) => {
+                                    let trim = ts.split_last().unwrap().1;
+                                    make_input(e.span(), trim)
+                                }
+                        _ => make_input(e.span(), ts)
                     }
                 }})
                 .map(|nested| match nested {
@@ -253,7 +265,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case("(1, 2, 3)", ArgumentList(vec![
+    #[case("()", List(vec![
+    ]))]
+    #[case("(1)", List(vec![
+        Atom(Number(dec!(1))),
+    ]))]
+    #[case("(1, 2, 3)", List(vec![
+        Atom(Number(dec!(1))),
+        Atom(Number(dec!(2))),
+        Atom(Number(dec!(3))),
+    ]))]
+    #[case("(1, 2, 3,)", List(vec![
         Atom(Number(dec!(1))),
         Atom(Number(dec!(2))),
         Atom(Number(dec!(3))),
