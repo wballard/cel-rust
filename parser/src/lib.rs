@@ -102,6 +102,11 @@ pub fn parse_expression<'a>(
                 };
                 Expression::Multiple([ll, rr].concat())
             }),
+            prefix(
+                1000,
+                just(Token::Operator(Operator::Logical(LogicalOp::Not))),
+                |right| Expression::Unary(Operator::Logical(LogicalOp::Not), Box::new(right)),
+            ),
         ))
     })
     .map(|x| x)
@@ -298,34 +303,46 @@ mod tests {
         assert_parse_eq("a()", FunctionCall("a".into(), None, vec![]));
     }
 
-    #[test]
-    fn test_parser_bool_unary_ops() {
-        assert_parse_eq(
-            "!false",
-            Unary(
-                Operator::Logical(LogicalOp::Not),
-                Box::new(Expression::Atom(Bool(false))),
-            ),
-        );
-        assert_parse_eq(
-            "!true",
-            Unary(
+    #[rstest]
+    #[case(
+        "!false",
+        Unary(
+            Operator::Logical(LogicalOp::Not),
+            Box::new(Expression::Atom(Bool(false))),
+        )
+    )]
+    #[case(
+        "!true",
+        Unary(
+            Operator::Logical(LogicalOp::Not),
+            Box::new(Expression::Atom(Bool(true))),
+        )
+    )]
+    #[case(
+        "!!true",
+        Unary(
+            Operator::Logical(LogicalOp::Not),
+            Box::new(Unary(
                 Operator::Logical(LogicalOp::Not),
                 Box::new(Expression::Atom(Bool(true))),
-            ),
-        );
+            )),
+        )
+    )]
+    fn unary_boolean(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
-    #[test]
-    fn test_parser_binary_bool_expressions() {
-        assert_parse_eq(
-            "true == true",
-            Binary(
-                Box::new(Expression::Atom(Bool(true))),
-                Operator::Relation(RelationOp::Equals),
-                Box::new(Expression::Atom(Bool(true))),
-            ),
-        );
+    #[rstest]
+    #[case(
+        "true == true",
+        Binary(
+            Box::new(Expression::Atom(Bool(true))),
+            Operator::Relation(RelationOp::Equals),
+            Box::new(Expression::Atom(Bool(true))),
+        )
+    )]
+    fn binary_boolean(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
     #[test]
