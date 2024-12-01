@@ -166,7 +166,7 @@ impl<'a, 'context> FromContext<'a, 'context> for Identifier {
         Self: Sized,
     {
         match arg_expr_from_context(ctx) {
-            Expression::Ident(ident) => Ok(ident.clone()),
+            Expression::Identifier(ident) => Ok(ident.clone()),
             expr => Err(ExecutionError::UnexpectedType {
                 got: format!("{:?}", expr),
                 want: "identifier".to_string(),

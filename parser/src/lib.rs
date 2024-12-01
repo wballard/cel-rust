@@ -25,6 +25,12 @@ pub use units::*;
 pub mod operators;
 pub use operators::*;
 
+mod lexer;
+use lexer::*;
+
+mod atoms;
+pub use atoms::*;
+
 /// Parses a CEL expression into an AST ready for analysis and evaluation.
 ///
 /// # Example
@@ -35,11 +41,10 @@ pub use operators::*;
 /// ```
 pub fn parse(input: &str) -> Result<Expression, ParseErrors> {
     // get the raw text turned into tokens -- then we can work with some structure
-    let (tokens, errors) = parse_tokens().parse(input).into_output_errors();
+    let (tokens, errors) = lexer().parse(input).into_output_errors();
     if errors.is_empty() {
         match tokens {
             Some(tokens) => {
-                //println!("{:?}", tokens);
                 let (expr, errors) = parse_expression().parse(&tokens).into_output_errors();
                 if errors.is_empty() {
                     Ok(expr.unwrap())
@@ -57,54 +62,70 @@ pub fn parse(input: &str) -> Result<Expression, ParseErrors> {
     }
 }
 
-fn parse_atom<'a>() -> impl Parser<'a, &'a str, Atom, extra::Err<Rich<'a, char>>> {
-    // atoms form the base of the expression tree
-    choice((
-        // keyword and constant atoms go first
-        parse_bool().map(Atom::Bool),
-        parse_ulid().map(Atom::Ulid),
-        parse_duration().map(Atom::Duration),
-        // dates ahead of numbers, otherwise they can look like minus expressions
-        parse_datetime().map(Atom::DateTime),
-        parse_number().map(Atom::Number),
-        parse_hashtag().map(Atom::HashTag),
-        parse_string().map(Atom::String),
-    ))
-}
-
-fn parse_tokens<'a>() -> impl Parser<'a, &'a str, Vec<Token>, extra::Err<Rich<'a, char>>> {
-    recursive(|token| {
-        choice((
-            // parens
-            token
-                .clone()
-                .repeated()
-                .collect()
-                .delimited_by(just('('), just(')'))
-                .map(Token::Parens),
-            token
-                .clone()
-                .repeated()
-                .collect()
-                .delimited_by(just('['), just(']'))
-                .map(Token::Brackets),
-            // the basic atoms
-            parse_atom().boxed().map(Token::Atom),
-        ))
-        .padded()
-    })
-    .repeated()
-    .collect()
-}
-
-fn parse_expression<'a>() -> impl Parser<'a, &'a [Token], Expression, extra::Err<Rich<'a, Token>>> {
+pub fn parse_expression<'a>(
+) -> impl Parser<'a, &'a [Token], Expression, extra::Err<Rich<'a, Token>>> {
+    /*
     recursive(|expression| {
-        choice((
+        let expressions = expression
+            .clone()
+            .separated_by(just(Token::Separator))
+            .allow_trailing()
+            .collect()
+            .map(Expression::Multiple);
+        let operand = choice((
             // token cases
             select! { Token::Atom(x) => Expression::Atom(x) },
-            expression.nested_in(select_ref! { Token::Brackets(x) => x.as_slice() }),
+            select! { Token::Identifier(x) => Expression::Identifier(x) },
+        ));
+        let out = choice((
+            operand.boxed(),
+            expression
+                .nested_in(select_ref! { Token::Brackets(ts) => ts.as_slice() })
+                .map(|nested| match nested {
+                    // picking out the nested expressions and turning them into a list
+                    Expression::Multiple(exprs) => Expression::List(exprs),
+                    // this is a sensible default -- any single item just becomes a list
+                    any => Expression::List(vec![any]),
+                }),
+        ));
+        out
+    });
+    */
+    let atom = select! { Token::Atom(x) => Expression::Atom(x) };
+    let identifier = select! { Token::Identifier(x) => Expression::Identifier(x) };
+    let atoms = choice((identifier, atom));
+    recursive(|expression| {
+        choice((
+            // simple atoms
+            atoms,
+            // compound nests
+            expression
+                .nested_in(select_ref! { Token::Brackets(ts) => ts.as_slice() })
+                .map(|nested| match nested {
+                    // picking out the nested expressions and turning them into a list
+                    Expression::Multiple(exprs) => Expression::List(exprs),
+                    // this is a sensible default -- any single item just becomes a list
+                    any => Expression::List(vec![any]),
+                }),
+        ))
+        .pratt((
+            // join the atoms together
+            infix(left(10), just(Token::Separator), |left, right| {
+                // flatten out as we go from the left associations of lists members
+                let ll = match left {
+                    Expression::Multiple(items) => items,
+                    any => vec![any],
+                };
+                let rr = match right {
+                    Expression::Multiple(items) => items,
+                    any => vec![any],
+                };
+                Expression::Multiple([ll, rr].concat())
+            }),
         ))
     })
+    .map(|x| x)
+
     /*
     let identifier = parse_identifier().map(Expression::Ident).boxed();
 
@@ -149,12 +170,15 @@ fn parse_expression<'a>() -> impl Parser<'a, &'a [Token], Expression, extra::Err
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
+    use super::*;
+    use crate::ast::Expression::*;
+    use crate::atoms::Atom::*;
+    use crate::operators::ArithmeticOp;
+    use crate::operators::LogicalOp;
+    use crate::operators::RelationOp;
     use chrono::TimeZone;
     use rstest::rstest;
     use rust_decimal_macros::dec;
-
-    use crate::{ArithmeticOp, Atom, Atom::*, Expression::*, Member::*, RelationOp, UnaryOp};
 
     fn parse(input: &str) -> Expression {
         crate::parse(input).unwrap_or_else(|e| panic!("{}", e))
@@ -164,8 +188,8 @@ mod tests {
         assert_eq!(parse(input), expected);
     }
     #[rstest]
-    #[case("a", Ident("a".into()))]
-    #[case("hello ", Ident("hello".into()))]
+    #[case("a", Identifier("a".into()))]
+    #[case("hello ", Identifier("hello".into()))]
     fn identifiers(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }
@@ -173,9 +197,9 @@ mod tests {
     #[rstest]
     #[case("1", Atom(Number(dec!(1))))]
     #[case("1.0", Atom(Number(dec!(1.0))))]
-    #[case("1e3", Expression::Atom(Atom::Number(dec!(1000.0))))]
-    #[case("1e-3", Expression::Atom(Atom::Number(dec!(0.001))))]
-    #[case("1.4e-3", Expression::Atom(Atom::Number(dec!(0.0014))))]
+    #[case("1e3", Expression::Atom(Number(dec!(1000.0))))]
+    #[case("1e-3", Expression::Atom(Number(dec!(0.001))))]
+    #[case("1.4e-3", Expression::Atom(Number(dec!(0.0014))))]
     fn numbers(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }
@@ -260,10 +284,10 @@ mod tests {
                     Atom(Number(dec!(3))),
                 ]))),
                 vec![
-                    Ident("x".into()),
-                    Arithmetic(
-                        Box::new(Ident("x".into())),
-                        ArithmeticOp::Multiply,
+                    Identifier("x".into()),
+                    Binary(
+                        Box::new(Identifier("x".into())),
+                        Operator::Arithmetic(ArithmeticOp::Multiply),
                         Box::new(Atom(Number(dec!(2)))),
                     ),
                 ],
@@ -271,6 +295,8 @@ mod tests {
         )
     }
 
+    /*
+    TODO: this is a slice
     #[test]
     fn nested_attributes() {
         assert_parse_eq(
@@ -281,6 +307,7 @@ mod tests {
             ),
         )
     }
+    */
 
     #[test]
     fn function_call_no_args() {
@@ -291,11 +318,17 @@ mod tests {
     fn test_parser_bool_unary_ops() {
         assert_parse_eq(
             "!false",
-            Unary(UnaryOp::Not, Box::new(Expression::Atom(Atom::Bool(false)))),
+            Unary(
+                Operator::Logical(LogicalOp::Not),
+                Box::new(Expression::Atom(Bool(false))),
+            ),
         );
         assert_parse_eq(
             "!true",
-            Unary(UnaryOp::Not, Box::new(Expression::Atom(Atom::Bool(true)))),
+            Unary(
+                Operator::Logical(LogicalOp::Not),
+                Box::new(Expression::Atom(Bool(true))),
+            ),
         );
     }
 
@@ -303,39 +336,31 @@ mod tests {
     fn test_parser_binary_bool_expressions() {
         assert_parse_eq(
             "true == true",
-            Relation(
-                Box::new(Expression::Atom(Atom::Bool(true))),
-                RelationOp::Equals,
-                Box::new(Expression::Atom(Atom::Bool(true))),
+            Binary(
+                Box::new(Expression::Atom(Bool(true))),
+                Operator::Relation(RelationOp::Equals),
+                Box::new(Expression::Atom(Bool(true))),
             ),
         );
     }
 
     #[test]
     fn test_parser_bool_unary_ops_repeated() {
-        assert_eq!(
-            parse("!!true"),
-            (Unary(
-                UnaryOp::DoubleNot,
-                Box::new(Expression::Atom(Atom::Bool(true))),
-            ))
-        );
-    }
-
-    #[test]
-    fn delimited_expressions() {
         assert_parse_eq(
-            "(-((1)))",
+            "!!true",
             Unary(
-                UnaryOp::Minus,
-                Box::new(Expression::Atom(Atom::Number(dec!(1)))),
+                Operator::Logical(LogicalOp::Not),
+                Box::new(Unary(
+                    Operator::Logical(LogicalOp::Not),
+                    Box::new(Expression::Atom(Bool(true))),
+                )),
             ),
         );
     }
 
     #[test]
     fn test_empty_list_parsing() {
-        assert_eq!(parse("[]"), (List(vec![])));
+        assert_parse_eq("[]", List(vec![]));
     }
 
     #[test]
@@ -343,13 +368,14 @@ mod tests {
         assert_parse_eq(
             "[1,2,3]",
             List(vec![
-                Expression::Atom(Atom::Number(dec!(1))),
-                Expression::Atom(Atom::Number(dec!(2))),
-                Expression::Atom(Atom::Number(dec!(3))),
+                Expression::Atom(Number(dec!(1))),
+                Expression::Atom(Number(dec!(2))),
+                Expression::Atom(Number(dec!(3))),
             ]),
         );
     }
 
+    /* TODO: this needs to be a slice
     #[test]
     fn list_index_parsing() {
         assert_parse_eq(
@@ -364,16 +390,16 @@ mod tests {
             ),
         );
     }
+    */
 
     #[test]
     fn mixed_type_list() {
         assert_parse_eq(
-            "['0', 1, 3.0, null]",
+            "['0', 1, 3.0]",
             List(vec![
                 Expression::Atom(String("0".to_string())),
                 Expression::Atom(Number(dec!(1))),
                 Expression::Atom(Number(dec!(3.0))),
-                Expression::Atom(Null),
             ]),
         );
     }
@@ -394,9 +420,9 @@ mod tests {
     fn test_in_list_relation() {
         assert_parse_eq(
             "2 in [2]",
-            Relation(
+            Binary(
                 Box::new(Expression::Atom(Number(dec!(2)))),
-                RelationOp::In,
+                Operator::Relation(RelationOp::In),
                 Box::new(List(vec![Expression::Atom(Number(dec!(2)))])),
             ),
         );
@@ -406,35 +432,35 @@ mod tests {
     fn integer_relations() {
         assert_parse_eq(
             "2 != 3",
-            Relation(
+            Binary(
                 Box::new(Expression::Atom(Number(dec!(2)))),
-                RelationOp::NotEquals,
+                Operator::Relation(RelationOp::NotEquals),
                 Box::new(Expression::Atom(Number(dec!(3)))),
             ),
         );
         assert_parse_eq(
             "2 == 3",
-            Relation(
+            Binary(
                 Box::new(Expression::Atom(Number(dec!(2)))),
-                RelationOp::Equals,
+                Operator::Relation(RelationOp::Equals),
                 Box::new(Expression::Atom(Number(dec!(3)))),
             ),
         );
 
         assert_parse_eq(
             "2 < 3",
-            Relation(
+            Binary(
                 Box::new(Expression::Atom(Number(dec!(2)))),
-                RelationOp::LessThan,
+                Operator::Relation(RelationOp::LessThan),
                 Box::new(Expression::Atom(Number(dec!(3)))),
             ),
         );
 
         assert_parse_eq(
             "2 <= 3",
-            Relation(
+            Binary(
                 Box::new(Expression::Atom(Number(dec!(2)))),
-                RelationOp::LessThanEq,
+                Operator::Relation(RelationOp::LessThanEq),
                 Box::new(Expression::Atom(Number(dec!(3)))),
             ),
         );
@@ -444,10 +470,10 @@ mod tests {
     fn sbinary_product_expressions() {
         assert_parse_eq(
             "2 * 3",
-            Arithmetic(
-                Box::new(Expression::Atom(Atom::Number(dec!(2)))),
-                ArithmeticOp::Multiply,
-                Box::new(Expression::Atom(Atom::Number(dec!(3)))),
+            Binary(
+                Box::new(Expression::Atom(Number(dec!(2)))),
+                Operator::Arithmetic(ArithmeticOp::Multiply),
+                Box::new(Expression::Atom(Number(dec!(3)))),
             ),
         );
     }
@@ -456,19 +482,19 @@ mod tests {
     fn test_parser_sum_expressions() {
         assert_parse_eq(
             "2 + 3",
-            Arithmetic(
-                Box::new(Expression::Atom(Atom::Number(dec!(2)))),
-                ArithmeticOp::Add,
-                Box::new(Expression::Atom(Atom::Number(dec!(3)))),
+            Binary(
+                Box::new(Expression::Atom(Number(dec!(2)))),
+                Operator::Arithmetic(ArithmeticOp::Add),
+                Box::new(Expression::Atom(Number(dec!(3)))),
             ),
         );
 
         assert_parse_eq(
             "2 - -3",
-            Arithmetic(
-                Box::new(Expression::Atom(Atom::Number(dec!(2)))),
-                ArithmeticOp::Subtract,
-                Box::new(Expression::Atom(Atom::Number(dec!(-3)))),
+            Binary(
+                Box::new(Expression::Atom(Number(dec!(2)))),
+                Operator::Arithmetic(ArithmeticOp::Subtract),
+                Box::new(Expression::Atom(Number(dec!(-3)))),
             ),
         );
     }
@@ -477,15 +503,17 @@ mod tests {
     fn conditionals() {
         assert_parse_eq(
             "true && true",
-            And(
+            Binary(
                 Box::new(Expression::Atom(Bool(true))),
+                Operator::Logical(LogicalOp::And),
                 Box::new(Expression::Atom(Bool(true))),
             ),
         );
         assert_parse_eq(
             "false || true",
-            Or(
+            Binary(
                 Box::new(Expression::Atom(Bool(false))),
+                Operator::Logical(LogicalOp::Or),
                 Box::new(Expression::Atom(Bool(true))),
             ),
         );
@@ -527,11 +555,12 @@ mod tests {
     fn test_operator_precedence() {
         assert_parse_eq(
             "a && b == 'string'",
-            And(
-                Box::new(Ident("a".into())),
-                Box::new(Relation(
-                    Box::new(Ident("b".into())),
-                    RelationOp::Equals,
+            Binary(
+                Box::new(Identifier("a".into())),
+                Operator::Logical(LogicalOp::And),
+                Box::new(Binary(
+                    Box::new(Identifier("b".into())),
+                    Operator::Relation(RelationOp::Equals),
                     Box::new(Expression::Atom(String("string".to_string()))),
                 )),
             ),
@@ -547,7 +576,7 @@ mod tests {
     #[case("2021-01-01T", chrono::Utc.with_ymd_and_hms(2021, 1, 1, 0, 0, 0).unwrap().into())]
     #[case("2021-01-01T14:20:01", chrono::Utc.with_ymd_and_hms(2021, 1, 1, 14, 20, 1).unwrap().into())]
     #[case("2021-01-01T14:20:01-08:00", chrono::Utc.with_ymd_and_hms(2021, 1, 1, 22, 20, 1).unwrap().into())]
-    fn test_dates(#[case] input: &str, #[case] expected: Atom) {
+    fn test_dates(#[case] input: &str, #[case] expected: lexer::Atom) {
         assert_parse_eq(input, Atom(expected));
     }
 

@@ -1,5 +1,46 @@
-use crate::ast::*;
+/// Keep the operators here.
+///
 use chumsky::prelude::*;
+
+/// Represents a relational operator in an expression.
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub enum RelationOp {
+    LessThan,
+    LessThanEq,
+    GreaterThan,
+    GreaterThanEq,
+    Equals,
+    NotEquals,
+    In,
+    MemberOf,
+}
+
+/// Represents an arithmetic operator in an expression.
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub enum ArithmeticOp {
+    Add,
+    Subtract,
+    Divide,
+    Multiply,
+    Modulus,
+}
+
+/// Represents a boolean operator in an expression.
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub enum LogicalOp {
+    And,
+    Or,
+    Not,
+}
+
+/// These are enumerated into categories to provide a bit more sepantics for
+/// the parser and to make it easier to understand the AST.
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+pub enum Operator {
+    Relation(RelationOp),
+    Arithmetic(ArithmeticOp),
+    Logical(LogicalOp),
+}
 
 pub fn parse_relation_op<'a>() -> impl Parser<'a, &'a str, RelationOp, extra::Err<Rich<'a, char>>> {
     let op = |c| just(c).padded();
@@ -15,13 +56,12 @@ pub fn parse_relation_op<'a>() -> impl Parser<'a, &'a str, RelationOp, extra::Er
     ))
 }
 
-pub fn parse_unary_op<'a>() -> impl Parser<'a, &'a str, UnaryOp, extra::Err<Rich<'a, char>>> {
+pub fn parse_logical_op<'a>() -> impl Parser<'a, &'a str, LogicalOp, extra::Err<Rich<'a, char>>> {
     let op = |c| just(c).padded();
     choice((
-        op("!").map(|_| UnaryOp::Not),
-        op("!!").map(|_| UnaryOp::DoubleNot),
-        op("-").map(|_| UnaryOp::Minus),
-        op("--").map(|_| UnaryOp::DoubleMinus),
+        op("!").map(|_| LogicalOp::Not),
+        op("&&").map(|_| LogicalOp::And),
+        op("||").map(|_| LogicalOp::Or),
     ))
 }
 
@@ -34,5 +74,14 @@ pub fn parse_arithmetic_op<'a>(
         op("*").map(|_| ArithmeticOp::Multiply),
         op("/").map(|_| ArithmeticOp::Divide),
         op("%").map(|_| ArithmeticOp::Modulus),
+    ))
+}
+
+/// Parse all supported operators.
+pub fn parse_op<'a>() -> impl Parser<'a, &'a str, Operator, extra::Err<Rich<'a, char>>> {
+    choice((
+        parse_relation_op().boxed().map(Operator::Relation),
+        parse_logical_op().boxed().map(Operator::Logical),
+        parse_arithmetic_op().boxed().map(Operator::Arithmetic),
     ))
 }

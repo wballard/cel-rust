@@ -1,5 +1,6 @@
 use crate::context::Context;
 use crate::functions::FunctionContext;
+use crate::Atom;
 use crate::ExecutionError;
 use base64;
 use cel_parser::*;
@@ -390,6 +391,7 @@ impl<'a> Value {
     pub fn resolve(expr: &'a Expression, ctx: &Context) -> ResolveResult {
         match expr {
             Expression::Atom(atom) => Ok(atom.into()),
+            /*
             Expression::Arithmetic(left, op, right) => {
                 let left = Value::resolve(left, ctx)?;
                 let right = Value::resolve(right, ctx)?;
@@ -480,6 +482,7 @@ impl<'a> Value {
                 let left = Value::resolve(left, ctx)?;
                 left.member(right, ctx)
             }
+            */
             Expression::List(items) => {
                 let list = items
                     .iter()
@@ -507,7 +510,7 @@ impl<'a> Value {
                     .collect();
                 Value::TagSet(list.into()).into()
             }
-            Expression::Ident(name) => ctx.get_variable(name),
+            Expression::Identifier(name) => ctx.get_variable(name),
             Expression::FunctionCall(name, target, args) => {
                 let func = ctx
                     .get_function(name)
@@ -528,6 +531,7 @@ impl<'a> Value {
                     }
                 }
             }
+            _ => unimplemented!(),
         }
     }
 

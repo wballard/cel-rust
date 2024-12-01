@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::ast::Token;
+use crate::lexer::Token;
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use chumsky::prelude::*;
 use thiserror::Error;
