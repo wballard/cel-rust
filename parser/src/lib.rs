@@ -93,6 +93,17 @@ where
         choice((
             // empty expression at end of sequence, this us used to delimit lists
             end().map(|_| Expression::Empty),
+            // calls are a function name followed by a list of arguments
+            identifier
+                .then(expression.clone())
+                .map(|(left, right)| match left {
+                    Expression::Identifier(name) => match right {
+                        // identifier and a tuple? -- that's a function call
+                        Expression::Tuple(args) => Expression::FunctionCall(name, None, args),
+                        _ => unreachable!(),
+                    },
+                    _ => unreachable!(),
+                }),
             // simple atoms
             atoms,
             // compound nests
@@ -175,7 +186,6 @@ where
             ),
         ))
     })
-    .map(|x| x)
 
     /*
     let identifier = parse_identifier().map(Expression::Ident).boxed();
@@ -347,14 +357,14 @@ mod tests {
     fn to_string() {
         assert_parse_eq(
             "[1, 2, 3].string()",
-            FunctionCall(
-                "string".into(),
-                Some(Box::new(List(vec![
+            Binary(
+                Box::new(List(vec![
                     Atom(Number(dec!(1))),
                     Atom(Number(dec!(2))),
                     Atom(Number(dec!(3))),
-                ]))),
-                vec![],
+                ])),
+                Operator::Relation(RelationOp::GetMember),
+                Box::new(FunctionCall("string".into(), None, vec![])),
             ),
         )
     }
