@@ -1,7 +1,6 @@
 pub use crate::atoms::*;
 pub use crate::operators::*;
 use chumsky::extra;
-use chumsky::pratt::*;
 use chumsky::prelude::*;
 
 use std::fmt::*;
@@ -50,7 +49,7 @@ impl Display for Token {
     }
 }
 
-/// Parse text into a sequence of tokens.
+/// Parse text into a sequence of tokens, consuming whitespace.
 ///
 /// This is not the full AST, but a structured representation of the input text.
 pub fn lexer<'a>() -> impl Parser<'a, &'a str, Vec<Token>, extra::Err<Rich<'a, char>>> {
@@ -79,12 +78,4 @@ pub fn lexer<'a>() -> impl Parser<'a, &'a str, Vec<Token>, extra::Err<Rich<'a, c
     })
     .repeated()
     .collect()
-}
-
-pub fn goo<'a>() -> impl Parser<'a, &'a str, Token, extra::Err<Rich<'a, char>>> {
-    let atom = choice((parse_atom().map(Token::Atom),));
-    let op = atom.pratt((infix(left(10), just('+').padded(), |lhs, rhs| {
-        Token::Separator
-    }),));
-    op
 }

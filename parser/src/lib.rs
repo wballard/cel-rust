@@ -64,33 +64,6 @@ pub fn parse(input: &str) -> Result<Expression, ParseErrors> {
 
 pub fn parse_expression<'a>(
 ) -> impl Parser<'a, &'a [Token], Expression, extra::Err<Rich<'a, Token>>> {
-    /*
-    recursive(|expression| {
-        let expressions = expression
-            .clone()
-            .separated_by(just(Token::Separator))
-            .allow_trailing()
-            .collect()
-            .map(Expression::Multiple);
-        let operand = choice((
-            // token cases
-            select! { Token::Atom(x) => Expression::Atom(x) },
-            select! { Token::Identifier(x) => Expression::Identifier(x) },
-        ));
-        let out = choice((
-            operand.boxed(),
-            expression
-                .nested_in(select_ref! { Token::Brackets(ts) => ts.as_slice() })
-                .map(|nested| match nested {
-                    // picking out the nested expressions and turning them into a list
-                    Expression::Multiple(exprs) => Expression::List(exprs),
-                    // this is a sensible default -- any single item just becomes a list
-                    any => Expression::List(vec![any]),
-                }),
-        ));
-        out
-    });
-    */
     let atom = select! { Token::Atom(x) => Expression::Atom(x) };
     let identifier = select! { Token::Identifier(x) => Expression::Identifier(x) };
     let atoms = choice((identifier, atom));
@@ -100,7 +73,14 @@ pub fn parse_expression<'a>(
             atoms,
             // compound nests
             expression
-                .nested_in(select_ref! { Token::Brackets(ts) => ts.as_slice() })
+                .nested_in(select_ref! { Token::Brackets(ts) => {
+                    // eat trailing separators
+                    if ts.last() == Some(&Token::Separator) {
+                        ts.split_last().unwrap().1
+                    } else {
+                        ts.as_slice()
+                    }
+                }})
                 .map(|nested| match nested {
                     // picking out the nested expressions and turning them into a list
                     Expression::Multiple(exprs) => Expression::List(exprs),
@@ -232,32 +212,36 @@ mod tests {
         assert_parse_eq(input, expected);
     }
 
-    #[test]
-    fn list() {
-        assert_parse_eq(
-            "[1, 2, 3]",
-            List(vec![
-                Atom(Number(dec!(1))),
-                Atom(Number(dec!(2))),
-                Atom(Number(dec!(3))),
-            ]),
-        )
+    #[rstest]
+    #[case("[1]", List(vec![
+        Atom(Number(dec!(1))),
+    ]))]
+    #[case("[1, 2, 3]", List(vec![
+        Atom(Number(dec!(1))),
+        Atom(Number(dec!(2))),
+        Atom(Number(dec!(3))),
+    ]))]
+    #[case("[1, 2, 3,]", List(vec![
+        Atom(Number(dec!(1))),
+        Atom(Number(dec!(2))),
+        Atom(Number(dec!(3))),
+    ]))]
+    fn list(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
+    }
+
+    #[rstest]
+    #[case("(1, 2, 3)", ArgumentList(vec![
+        Atom(Number(dec!(1))),
+        Atom(Number(dec!(2))),
+        Atom(Number(dec!(3))),
+    ]))]
+    fn argument_list(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
     #[test]
-    fn argument_list() {
-        assert_parse_eq(
-            "(1, 2, 3)",
-            ArgumentList(vec![
-                Atom(Number(dec!(1))),
-                Atom(Number(dec!(2))),
-                Atom(Number(dec!(3))),
-            ]),
-        )
-    }
-
-    #[test]
-    fn list_to_string() {
+    fn to_string() {
         assert_parse_eq(
             "[1, 2, 3].string()",
             FunctionCall(
