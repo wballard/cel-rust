@@ -102,10 +102,22 @@ pub fn parse_expression<'a>(
                 };
                 Expression::Multiple([ll, rr].concat())
             }),
+            // logical operators
             prefix(
                 1000,
                 just(Token::Operator(Operator::Logical(LogicalOp::Not))),
                 |right| Expression::Unary(Operator::Logical(LogicalOp::Not), Box::new(right)),
+            ),
+            infix(
+                left(100),
+                just(Token::Operator(Operator::Logical(LogicalOp::And))),
+                |left, right| {
+                    Expression::Binary(
+                        Box::new(left),
+                        Operator::Logical(LogicalOp::And),
+                        Box::new(right),
+                    )
+                },
             ),
         ))
     })
@@ -334,10 +346,10 @@ mod tests {
 
     #[rstest]
     #[case(
-        "true == true",
+        "true && true",
         Binary(
             Box::new(Expression::Atom(Bool(true))),
-            Operator::Relation(RelationOp::Equals),
+            Operator::Logical(LogicalOp::And),
             Box::new(Expression::Atom(Bool(true))),
         )
     )]
