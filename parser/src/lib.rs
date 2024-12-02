@@ -553,6 +553,22 @@ mod tests {
             Box::new(Expression::Atom(Bool(true))),
         )
     )]
+    #[case(
+        "true || true",
+        Binary(
+            Box::new(Expression::Atom(Bool(true))),
+            Operator::Logical(LogicalOp::Or),
+            Box::new(Expression::Atom(Bool(true))),
+        )
+    )]
+    #[case(
+        "true ^^ true",
+        Binary(
+            Box::new(Expression::Atom(Bool(true))),
+            Operator::Logical(LogicalOp::Xor),
+            Box::new(Expression::Atom(Bool(true))),
+        )
+    )]
     fn binary_boolean(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }

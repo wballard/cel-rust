@@ -65,6 +65,7 @@ pub fn parse_logical_op<'a>() -> impl Parser<'a, &'a str, LogicalOp, extra::Err<
     choice((
         op("&&").map(|_| LogicalOp::And),
         op("||").map(|_| LogicalOp::Or),
+        op("^^").map(|_| LogicalOp::Xor),
         op("!").map(|_| LogicalOp::Not),
     ))
 }
