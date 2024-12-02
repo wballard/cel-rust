@@ -283,47 +283,6 @@ where
             ),
         ))
     })
-
-    /*
-    let identifier = parse_identifier().map(Expression::Ident).boxed();
-
-    // and this is the expression recursive parser
-    recursive(|expression| {
-        let expression_list = expression
-            .clone()
-            .separated_by(just(','))
-            .allow_trailing()
-            .collect();
-        let list = expression_list
-            .clone()
-            .delimited_by(just('['), just(']'))
-            .map(Expression::List);
-        let argument_list = expression_list
-            .clone()
-            .delimited_by(just('('), just(')'))
-            .map(Expression::ArgumentList);
-        let tagset = expression_list
-            .clone()
-            .delimited_by(just('{'), just('}'))
-            .map(Expression::TagSet);
-
-        //choice((function_call, atom, identifier, list, tagset)).padded()
-        // starting from the 'left' -- an expression will have an initial atom or identifier
-        //let operand = choice((atom, identifier, list, argument_list, tagset)).padded();
-        let operand = choice((atom, list)).padded();
-
-        let p = operand
-            .pratt(vec![
-                //unary operators
-                prefix(10, just('!'), |_, e| {
-                    Ok(Expression::Unary(UnaryOp::Not, Box::new(e)))
-                }),
-            ])
-            .clone();
-
-        operand
-    })
-    */
 }
 
 #[cfg(test)]
@@ -749,53 +708,48 @@ mod tests {
             ),
         );
     }
-    #[test]
-    fn test_ternary_true_condition() {
-        assert_parse_eq(
-            "true ? 'result_true' : 'result_false'",
-            Ternary(
-                Box::new(Expression::Atom(Bool(true))),
-                Box::new(Expression::Atom(String("result_true".to_string()))),
-                Box::new(Expression::Atom(String("result_false".to_string()))),
-            ),
-        );
-
-        assert_parse_eq(
-            "true ? 100 : 200",
-            Ternary(
-                Box::new(Expression::Atom(Bool(true))),
-                Box::new(Expression::Atom(Number(dec!(100)))),
-                Box::new(Expression::Atom(Number(dec!(200)))),
-            ),
-        );
+    #[rstest]
+    #[case("true ? 'result_true' : 'result_false'", Ternary(
+        Box::new(Expression::Atom(Bool(true))),
+        Box::new(Expression::Atom(String("result_true".to_string()))),
+        Box::new(Expression::Atom(String("result_false".to_string()))),
+    ))]
+    #[case("true ? 100 : 200", Ternary(
+        Box::new(Expression::Atom(Bool(true))),
+        Box::new(Expression::Atom(Number(dec!(100)))),
+        Box::new(Expression::Atom(Number(dec!(200)))),
+    ))]
+    #[case("false ? 'result_true' : 'result_false'", Ternary(
+        Box::new(Expression::Atom(Bool(false))),
+        Box::new(Expression::Atom(String("result_true".to_string()))),
+        Box::new(Expression::Atom(String("result_false".to_string()))),
+    ))]
+    fn ternary(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
-    #[test]
-    fn test_ternary_false_condition() {
-        assert_parse_eq(
-            "false ? 'result_true' : 'result_false'",
-            Ternary(
-                Box::new(Expression::Atom(Bool(false))),
-                Box::new(Expression::Atom(String("result_true".to_string()))),
-                Box::new(Expression::Atom(String("result_false".to_string()))),
-            ),
-        );
-    }
-
-    #[test]
-    fn test_operator_precedence() {
-        assert_parse_eq(
-            "a && b == 'string'",
-            Binary(
+    #[rstest]
+    #[case("a && b == 'string'", Binary(
+        Box::new(Identifier("a".into())),
+        Operator::Logical(LogicalOp::And),
+        Box::new(Binary(
+            Box::new(Identifier("b".into())),
+            Operator::Relation(RelationOp::Equals),
+            Box::new(Expression::Atom(String("string".to_string()))),
+        )),
+    ))]
+    #[case("a && b || 'string'", Binary(
+            Box::new(Binary(
                 Box::new(Identifier("a".into())),
                 Operator::Logical(LogicalOp::And),
-                Box::new(Binary(
-                    Box::new(Identifier("b".into())),
-                    Operator::Relation(RelationOp::Equals),
-                    Box::new(Expression::Atom(String("string".to_string()))),
-                )),
-            ),
-        );
+                Box::new(Identifier("b".into())),
+            )),
+            Operator::Logical(LogicalOp::Or),
+            Box::new(Expression::Atom(String("string".to_string()))),
+        ),
+    )]
+    fn operator_precedence(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
     #[test]
