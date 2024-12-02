@@ -1,6 +1,7 @@
 /// Keep the operators here.
 ///
 use chumsky::prelude::*;
+use std::fmt::Display;
 
 /// Represents a relational operator in an expression.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
@@ -15,6 +16,22 @@ pub enum RelationOp {
     GetMember,
 }
 
+impl Display for RelationOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let op = match self {
+            RelationOp::LessThan => "<",
+            RelationOp::LessThanEq => "<=",
+            RelationOp::GreaterThan => ">",
+            RelationOp::GreaterThanEq => ">=",
+            RelationOp::Equals => "==",
+            RelationOp::NotEquals => "!=",
+            RelationOp::In => "in",
+            RelationOp::GetMember => ".",
+        };
+        write!(f, "{}", op)
+    }
+}
+
 /// Represents an arithmetic operator in an expression.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum ArithmeticOp {
@@ -26,6 +43,20 @@ pub enum ArithmeticOp {
     Exponent,
 }
 
+impl Display for ArithmeticOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let op = match self {
+            ArithmeticOp::Add => "+",
+            ArithmeticOp::Subtract => "-",
+            ArithmeticOp::Divide => "/",
+            ArithmeticOp::Multiply => "*",
+            ArithmeticOp::Modulus => "%",
+            ArithmeticOp::Exponent => "^",
+        };
+        write!(f, "{}", op)
+    }
+}
+
 /// Represents a boolean operator in an expression.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum LogicalOp {
@@ -35,6 +66,18 @@ pub enum LogicalOp {
     Xor,
 }
 
+impl Display for LogicalOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let op = match self {
+            LogicalOp::And => "&&",
+            LogicalOp::Or => "||",
+            LogicalOp::Not => "!",
+            LogicalOp::Xor => "^^",
+        };
+        write!(f, "{}", op)
+    }
+}
+
 /// These are enumerated into categories to provide a bit more sepantics for
 /// the parser and to make it easier to understand the AST.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
@@ -42,6 +85,16 @@ pub enum Operator {
     Relation(RelationOp),
     Arithmetic(ArithmeticOp),
     Logical(LogicalOp),
+}
+
+impl Display for Operator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Operator::Relation(op) => write!(f, "{}", op),
+            Operator::Arithmetic(op) => write!(f, "{}", op),
+            Operator::Logical(op) => write!(f, "{}", op),
+        }
+    }
 }
 
 pub fn parse_relation_op<'a>() -> impl Parser<'a, &'a str, RelationOp, extra::Err<Rich<'a, char>>> {

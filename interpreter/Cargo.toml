@@ -13,12 +13,12 @@ cel-parser = { path = "../parser", version = "0.8.0" }
 
 nom = "7.1.3"
 
-chrono = { version = "0.4", default-features = false, features = ["alloc", "serde"], optional = true }
-regex = { version = "1.10.5", optional = true }
+chrono = { version = "0.4", default-features = false, features = ["alloc", "serde"]}
+regex = { version = "1.10.5"}
 serde = "1.0"
 base64 = "0.22.1"
 ulid = "1.1.3"
-rust_decimal = "1.36.0"
+rust_decimal = { version="1.36.0", features = ["maths"] }
 rust_decimal_macros = "1.36.0"
 
 thiserror = "1.0"
@@ -33,7 +33,3 @@ rstest = "0.23.0"
 name = "runtime"
 harness = false
 
-[features]
-default = ["regex", "chrono"]
-regex = ["dep:regex"]
-chrono = ["dep:chrono"]

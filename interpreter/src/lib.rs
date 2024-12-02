@@ -54,7 +54,7 @@ pub enum ExecutionError {
     /// Indicates that an unsupported binary operator was applied on two values
     /// where it's unsupported, for example list + map.
     #[error("Unsupported binary operator '{0}': {1:?}, {2:?}")]
-    UnsupportedBinaryOperator(&'static str, Value, Value),
+    UnsupportedBinaryOperator(Operator, Value, Value),
     /// Indicates that an unsupported type was used to index a map
     #[error("Cannot use value as map index: {0:?}")]
     UnsupportedMapIndex(Value),
@@ -165,6 +165,7 @@ mod tests {
         let program = Program::compile(script).unwrap();
         program.execute(&ctx.unwrap_or_default())
     }
+
     fn check_script(script: &str, expected: &str) {
         let program = Program::compile(script).unwrap();
         let context = Context::default();

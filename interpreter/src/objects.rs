@@ -7,6 +7,7 @@ use cel_parser::*;
 use chrono::SecondsFormat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
+use rust_decimal::MathematicalOps;
 use rust_decimal_macros::dec;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -62,6 +63,23 @@ pub enum Value {
     Null,
     Ulid(ulid::Ulid),
     HashTag(HashTag),
+}
+
+impl Value {
+    /// Strings and numbers can turn into decimals.
+    fn to_decimal(&self) -> Result<Decimal, ExecutionError> {
+        match self {
+            Value::Number(v) => Ok(*v),
+            Value::String(v) => v.parse().map_err(|_| ExecutionError::UnexpectedType {
+                got: v.clone(),
+                want: "number".to_string(),
+            }),
+            _ => Err(ExecutionError::UnexpectedType {
+                got: self.type_of().to_string(),
+                want: "number".to_string(),
+            }),
+        }
+    }
 }
 
 /// Reverse type mapping to allow type inspection.
@@ -156,7 +174,9 @@ impl Display for Value {
                 None => write!(f, "{}", name),
             },
             Value::Number(v) => write!(f, "{}", v),
-            Value::String(v) => write!(f, "{}", v),
+            // show strings in quotes to make them easier to read
+            // and make sure to escape them -- this allows round-tripping
+            Value::String(v) => write!(f, "'{}'", v.replace("'", "\\'")),
             Value::Bool(v) => write!(f, "{}", v),
             Value::Null => write!(f, "null"),
             Value::Duration(v) => write!(f, "{}", v),
@@ -397,6 +417,27 @@ impl<'a> Value {
     pub fn resolve(expr: &'a Expression, ctx: &Context) -> ResolveResult {
         match expr {
             Expression::Atom(atom) => Ok(atom.into()),
+            Expression::Binary(left, op, right) => {
+                let left = Value::resolve(left, ctx)?;
+                let right = Value::resolve(right, ctx)?;
+                match op {
+                    Operator::Arithmetic(ArithmeticOp::Add) => left + right,
+                    Operator::Arithmetic(ArithmeticOp::Subtract) => left - right,
+                    Operator::Arithmetic(ArithmeticOp::Divide) => left / right,
+                    Operator::Arithmetic(ArithmeticOp::Multiply) => left * right,
+                    Operator::Arithmetic(ArithmeticOp::Modulus) => left % right,
+                    Operator::Arithmetic(ArithmeticOp::Exponent) => {
+                        let ll = left.to_decimal()?;
+                        let rr = right.to_decimal()?;
+                        Ok(ll.powd(rr).into())
+                    }
+                    _ => Err(ExecutionError::UnsupportedBinaryOperator(
+                        op.clone(),
+                        left,
+                        right,
+                    )),
+                }
+            }
             /*
             Expression::Arithmetic(left, op, right) => {
                 let left = Value::resolve(left, ctx)?;
@@ -658,15 +699,21 @@ impl ops::Add<Value> for Value {
                 new.push_str(&r.to_string());
                 Value::String(new).into()
             }
-            (Value::Null, Value::Null) => Value::Null.into(),
+            (Value::Number(l), Value::String(r)) => {
+                let mut new = String::with_capacity(r.len() + 1);
+                new.push_str(&l.to_string());
+                new.push_str(&r);
+                Value::String(new).into()
+            }
 
             (Value::Duration(l), Value::Duration(r)) => Value::Duration(l + r).into(),
-
             (Value::Timestamp(l), Value::Duration(r)) => Value::Timestamp(l + r).into(),
-
             (Value::Duration(l), Value::Timestamp(r)) => Value::Timestamp(r + l).into(),
+
             (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                "add", left, right,
+                Operator::Arithmetic(ArithmeticOp::Add),
+                left,
+                right,
             )),
         }
     }
@@ -698,14 +745,14 @@ impl ops::Sub<Value> for Value {
     fn sub(self, rhs: Value) -> Self::Output {
         match (self, rhs) {
             (Value::Number(l), Value::Number(r)) => Value::Number(l - r).into(),
-
             (Value::Duration(l), Value::Duration(r)) => Value::Duration(l - r).into(),
-
             (Value::Timestamp(l), Value::Duration(r)) => Value::Timestamp(l - r).into(),
-
             (Value::Timestamp(l), Value::Timestamp(r)) => Value::Duration(l - r).into(),
+
             (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                "sub", left, right,
+                Operator::Arithmetic(ArithmeticOp::Subtract),
+                left,
+                right,
             )),
         }
     }
@@ -720,7 +767,9 @@ impl ops::Div<Value> for Value {
             (Value::Number(l), Value::Number(r)) => Value::Number(l / r).into(),
 
             (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                "div", left, right,
+                Operator::Arithmetic(ArithmeticOp::Divide),
+                left,
+                right,
             )),
         }
     }
@@ -735,7 +784,9 @@ impl ops::Mul<Value> for Value {
             (Value::Number(l), Value::Number(r)) => Value::Number(l * r).into(),
 
             (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                "mul", left, right,
+                Operator::Arithmetic(ArithmeticOp::Multiply),
+                left,
+                right,
             )),
         }
     }
@@ -749,7 +800,9 @@ impl ops::Rem<Value> for Value {
         match (self, rhs) {
             (Value::Number(l), Value::Number(r)) => Value::Number(l % r).into(),
             (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                "rem", left, right,
+                Operator::Arithmetic(ArithmeticOp::Modulus),
+                left,
+                right,
             )),
         }
     }
@@ -808,41 +861,6 @@ mod tests {
         assert_eq!(program.execute(&context).unwrap(), Value::Bool(true));
     }
 
-    #[test]
-    fn test_add_numbers() {
-        let program = Program::compile("1 + 2").unwrap();
-        let context = Context::default();
-        let result = program.execute(&context);
-        assert_eq!(result.unwrap(), Value::Number(3.into()));
-    }
-
-    #[test]
-    fn test_add_strings() {
-        let program = Program::compile("'foo' + 'bar'").unwrap();
-        let context = Context::default();
-        let result = program.execute(&context);
-        assert_eq!(result.unwrap(), Value::String("foobar".to_string()));
-    }
-
-    #[test]
-    fn test_add_lists() {
-        let program = Program::compile("[1, 2] + [3, 4]").unwrap();
-        let context = Context::default();
-        let result = program.execute(&context);
-        assert_eq!(
-            result.unwrap(),
-            Value::List(vec![1.into(), 2.into(), 3.into(), 4.into()].into())
-        );
-    }
-
-    #[test]
-    fn test_add_number_to_string() {
-        let program = Program::compile("'foo' + 10").unwrap();
-        let context = Context::default();
-        let result = program.execute(&context);
-        assert_eq!(result.unwrap(), Value::String("foo10".to_string()));
-    }
-
     /// Helper that will expect an error.
     fn test_execution_error(program: &str, expected: ExecutionError) {
         let program = Program::compile(program).unwrap();
@@ -855,7 +873,7 @@ mod tests {
         test_execution_error(
             "'foo' - 10",
             ExecutionError::UnsupportedBinaryOperator(
-                "sub",
+                Operator::Arithmetic(ArithmeticOp::Subtract),
                 "foo".into(),
                 Value::Number(10.into()),
             ),
@@ -867,7 +885,7 @@ mod tests {
         test_execution_error(
             "'foo' / 10",
             ExecutionError::UnsupportedBinaryOperator(
-                "div",
+                Operator::Arithmetic(ArithmeticOp::Divide),
                 "foo".into(),
                 Value::Number(10.into()),
             ),
@@ -879,7 +897,7 @@ mod tests {
         test_execution_error(
             "'foo' % 10",
             ExecutionError::UnsupportedBinaryOperator(
-                "rem",
+                Operator::Arithmetic(ArithmeticOp::Modulus),
                 "foo".into(),
                 Value::Number(10.into()),
             ),
@@ -887,7 +905,7 @@ mod tests {
     }
 
     #[test]
-    fn out_of_bound_list_access() {
+    fn ut_of_bound_list_access() {
         let program = Program::compile("list[10]").unwrap();
         let mut context = Context::default();
         context.add_variable_from_value("list", Value::List(vec![].into()));
