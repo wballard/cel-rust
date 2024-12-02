@@ -88,6 +88,20 @@ where
         Expression::Identifier(x.clone())
     }};
     let atoms = choice((identifier, atom));
+    let relations = choice((
+        just(Token::Operator(Operator::Relation(RelationOp::Equals))),
+        just(Token::Operator(Operator::Relation(RelationOp::NotEquals))),
+        just(Token::Operator(Operator::Relation(RelationOp::LessThan))),
+        just(Token::Operator(Operator::Relation(RelationOp::LessThanEq))),
+        just(Token::Operator(Operator::Relation(RelationOp::GreaterThan))),
+        just(Token::Operator(Operator::Relation(
+            RelationOp::GreaterThanEq,
+        ))),
+    ))
+    .map(|e| match e {
+        Token::Operator(Operator::Relation(op)) => op,
+        _ => unreachable!(),
+    });
 
     recursive(|expression| {
         choice((
@@ -198,6 +212,9 @@ where
                     )
                 },
             ),
+            infix(left(270), relations, |left, op, right| {
+                Expression::Binary(Box::new(left), Operator::Relation(op), Box::new(right))
+            }),
         ))
     })
 
@@ -545,42 +562,39 @@ mod tests {
         assert_parse_eq(input, expected);
     }
 
-    #[test]
-    fn integer_relations() {
-        assert_parse_eq(
-            "2 != 3",
-            Binary(
-                Box::new(Expression::Atom(Number(dec!(2)))),
-                Operator::Relation(RelationOp::NotEquals),
-                Box::new(Expression::Atom(Number(dec!(3)))),
-            ),
-        );
-        assert_parse_eq(
-            "2 == 3",
-            Binary(
-                Box::new(Expression::Atom(Number(dec!(2)))),
-                Operator::Relation(RelationOp::Equals),
-                Box::new(Expression::Atom(Number(dec!(3)))),
-            ),
-        );
-
-        assert_parse_eq(
-            "2 < 3",
-            Binary(
-                Box::new(Expression::Atom(Number(dec!(2)))),
-                Operator::Relation(RelationOp::LessThan),
-                Box::new(Expression::Atom(Number(dec!(3)))),
-            ),
-        );
-
-        assert_parse_eq(
-            "2 <= 3",
-            Binary(
-                Box::new(Expression::Atom(Number(dec!(2)))),
-                Operator::Relation(RelationOp::LessThanEq),
-                Box::new(Expression::Atom(Number(dec!(3)))),
-            ),
-        );
+    #[rstest]
+    #[case("2 != 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Relation(RelationOp::NotEquals),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    #[case("2 == 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Relation(RelationOp::Equals),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    #[case("2 < 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Relation(RelationOp::LessThan),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    #[case("2 <= 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Relation(RelationOp::LessThanEq),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    #[case("2 > 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Relation(RelationOp::GreaterThan),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    #[case("2 >= 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Relation(RelationOp::GreaterThanEq),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    fn integer_relations(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
     #[test]
@@ -595,25 +609,39 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_parser_sum_expressions() {
-        assert_parse_eq(
-            "2 + 3",
-            Binary(
-                Box::new(Expression::Atom(Number(dec!(2)))),
-                Operator::Arithmetic(ArithmeticOp::Add),
-                Box::new(Expression::Atom(Number(dec!(3)))),
-            ),
-        );
-
-        assert_parse_eq(
-            "2 - -3",
-            Binary(
-                Box::new(Expression::Atom(Number(dec!(2)))),
-                Operator::Arithmetic(ArithmeticOp::Subtract),
-                Box::new(Expression::Atom(Number(dec!(-3)))),
-            ),
-        );
+    #[rstest]
+    #[case("2 + 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Arithmetic(ArithmeticOp::Add),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    #[case("2 - 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Arithmetic(ArithmeticOp::Subtract),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    #[case("2 * 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Arithmetic(ArithmeticOp::Multiply),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    #[case("2 / 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Arithmetic(ArithmeticOp::Divide),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    #[case("2 % 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Arithmetic(ArithmeticOp::Modulus),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    #[case("2 ^ 3", Binary(
+        Box::new(Expression::Atom(Number(dec!(2)))),
+        Operator::Arithmetic(ArithmeticOp::Exponent),
+        Box::new(Expression::Atom(Number(dec!(3)))),
+    ))]
+    fn integer_arithmetic(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
     }
 
     #[test]

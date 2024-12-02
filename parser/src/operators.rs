@@ -23,6 +23,7 @@ pub enum ArithmeticOp {
     Divide,
     Multiply,
     Modulus,
+    Exponent,
 }
 
 /// Represents a boolean operator in an expression.
@@ -44,14 +45,16 @@ pub enum Operator {
 
 pub fn parse_relation_op<'a>() -> impl Parser<'a, &'a str, RelationOp, extra::Err<Rich<'a, char>>> {
     let op = |c| just(c).padded();
+    // watch the order of precedence here -- long tokens with the same prefix
+    // need to go ahead of short tokens
     choice((
-        op("<").map(|_| RelationOp::LessThan),
         op("<=").map(|_| RelationOp::LessThanEq),
-        op(">").map(|_| RelationOp::GreaterThan),
         op(">=").map(|_| RelationOp::GreaterThanEq),
         op("==").map(|_| RelationOp::Equals),
         op("!=").map(|_| RelationOp::NotEquals),
         op("in").map(|_| RelationOp::In),
+        op("<").map(|_| RelationOp::LessThan),
+        op(">").map(|_| RelationOp::GreaterThan),
         op(".").map(|_| RelationOp::GetMember),
     ))
 }
@@ -59,9 +62,9 @@ pub fn parse_relation_op<'a>() -> impl Parser<'a, &'a str, RelationOp, extra::Er
 pub fn parse_logical_op<'a>() -> impl Parser<'a, &'a str, LogicalOp, extra::Err<Rich<'a, char>>> {
     let op = |c| just(c).padded();
     choice((
-        op("!").map(|_| LogicalOp::Not),
         op("&&").map(|_| LogicalOp::And),
         op("||").map(|_| LogicalOp::Or),
+        op("!").map(|_| LogicalOp::Not),
     ))
 }
 
@@ -74,6 +77,7 @@ pub fn parse_arithmetic_op<'a>(
         op("*").map(|_| ArithmeticOp::Multiply),
         op("/").map(|_| ArithmeticOp::Divide),
         op("%").map(|_| ArithmeticOp::Modulus),
+        op("^").map(|_| ArithmeticOp::Exponent),
     ))
 }
 
