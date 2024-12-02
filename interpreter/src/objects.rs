@@ -48,16 +48,14 @@ impl From<Vec<HashTag>> for ValueSet {
 /// Values that can be computed by the interpreter.
 #[derive(Debug, Clone)]
 pub enum Value {
+    // structures
     List(ValueList),
     Tuple(ValueList),
     Set(ValueSet),
-
     Function(Identifier, Option<Box<Value>>),
-
     // Atoms
     Number(Decimal),
     String(String),
-    Bytes(Vec<u8>),
     Bool(bool),
     Duration(chrono::Duration),
     Timestamp(chrono::DateTime<chrono::Utc>),
@@ -112,7 +110,6 @@ impl Value {
             Value::Function(_, _) => ValueType::Function,
             Value::Number(_) => ValueType::Number,
             Value::String(_) => ValueType::String,
-            Value::Bytes(_) => ValueType::Bytes,
             Value::Bool(_) => ValueType::Bool,
             Value::Duration(_) => ValueType::Duration,
             Value::Timestamp(_) => ValueType::Timestamp,
@@ -160,11 +157,6 @@ impl Display for Value {
             },
             Value::Number(v) => write!(f, "{}", v),
             Value::String(v) => write!(f, "{}", v),
-            Value::Bytes(v) => {
-                let mut buf = String::new();
-                CUSTOM_ENGINE.encode_string(v, &mut buf);
-                write!(f, "{}", buf)
-            }
             Value::Bool(v) => write!(f, "{}", v),
             Value::Null => write!(f, "null"),
             Value::Duration(v) => write!(f, "{}", v),
@@ -227,6 +219,12 @@ impl From<f64> for Value {
     }
 }
 
+impl From<Decimal> for Value {
+    fn from(value: Decimal) -> Self {
+        Value::Number(value)
+    }
+}
+
 impl From<bool> for Value {
     fn from(value: bool) -> Self {
         Value::Bool(value)
@@ -239,6 +237,12 @@ impl From<String> for Value {
     }
 }
 
+impl From<&str> for Value {
+    fn from(v: &str) -> Self {
+        Value::String(v.to_string())
+    }
+}
+
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -246,7 +250,6 @@ impl PartialEq for Value {
             (Value::Function(a1, a2), Value::Function(b1, b2)) => a1 == b1 && a2 == b2,
             (Value::Number(a), Value::Number(b)) => a == b,
             (Value::String(a), Value::String(b)) => a == b,
-            (Value::Bytes(a), Value::Bytes(b)) => a == b,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Null, Value::Null) => true,
 
@@ -274,7 +277,6 @@ impl std::hash::Hash for Value {
             }
             Value::Number(v) => v.hash(state),
             Value::String(v) => v.hash(state),
-            Value::Bytes(v) => v.hash(state),
             Value::Bool(v) => v.hash(state),
             Value::Null => Value::Null.hash(state),
 
@@ -318,12 +320,6 @@ impl<T: Into<Value>> From<Vec<T>> for Value {
     }
 }
 
-impl From<&str> for Value {
-    fn from(v: &str) -> Self {
-        Value::String(v.to_string())
-    }
-}
-
 impl<T: Into<Value>> From<Option<T>> for Value {
     fn from(v: Option<T>) -> Self {
         match v {
@@ -357,11 +353,6 @@ impl From<Value> for String {
             Value::Duration(v) => v.to_string(),
             Value::Timestamp(v) => v.to_rfc3339(),
             Value::Ulid(v) => v.to_string(),
-            Value::Bytes(v) => {
-                let mut buf = String::new();
-                CUSTOM_ENGINE.encode_string(v, &mut buf);
-                buf
-            }
             Value::List(v) => {
                 let mut buf = String::new();
                 buf.push('[');
@@ -609,7 +600,6 @@ impl<'a> Value {
             Value::Set(v) => !v.set.is_empty(),
             Value::Number(v) => *v != dec!(0),
             Value::String(v) => !v.is_empty(),
-            Value::Bytes(v) => !v.is_empty(),
             Value::Bool(v) => *v,
             Value::Null => false,
 
@@ -667,12 +657,6 @@ impl ops::Add<Value> for Value {
                 new.push_str(&l);
                 new.push_str(&r.to_string());
                 Value::String(new).into()
-            }
-            (Value::Bytes(l), Value::Bytes(r)) => {
-                let mut new = Vec::with_capacity(l.len() + r.len());
-                new.extend_from_slice(&l);
-                new.extend_from_slice(&r);
-                Value::Bytes(new).into()
             }
             (Value::Null, Value::Null) => Value::Null.into(),
 

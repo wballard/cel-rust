@@ -8,7 +8,6 @@ use std::marker::PhantomData;
 impl_conversions!(
     rust_decimal::Decimal => Value::Number,
     String => Value::String,
-    Vec<u8> => Value::Bytes,
     bool => Value::Bool,
     ValueList => Value::List
 );

@@ -117,17 +117,11 @@ pub fn size(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
 pub fn contains(This(this): This<Value>, arg: Value) -> Result<Value> {
     Ok(match this {
         Value::List(v) => v.list.contains(&arg),
+        Value::Set(v) => v.set.contains(&arg),
+        Value::Tuple(v) => v.list.contains(&arg),
         Value::String(s) => {
             if let Value::String(arg) = arg {
                 s.contains(arg.as_str())
-            } else {
-                false
-            }
-        }
-        Value::Bytes(b) => {
-            if let Value::Bytes(arg) = arg {
-                let s = arg.as_slice();
-                b.windows(arg.len()).any(|w| w == s)
             } else {
                 false
             }
@@ -137,26 +131,9 @@ pub fn contains(This(this): This<Value>, arg: Value) -> Result<Value> {
     .into())
 }
 
-// Performs a type conversion on the target. The following conversions are currently
-// supported:
-// * `string` - Returns a copy of the target string.
-// * `timestamp` - Returns the timestamp in RFC3339 format.
-// * `duration` - Returns the duration in a string formatted like "72h3m0.5s".
-// * `int` - Returns the integer value of the target.
-// * `uint` - Returns the unsigned integer value of the target.
-// * `float` - Returns the float value of the target.
-// * `bytes` - Converts bytes to string using from_utf8_lossy.
-pub fn string(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
-    Ok(match this {
-        Value::String(v) => Value::String(v.clone()),
-
-        Value::Timestamp(t) => Value::String(t.to_rfc3339()),
-
-        Value::Duration(v) => Value::String(v.to_string()),
-        Value::Number(v) => Value::String(v.to_string()),
-        Value::Bytes(v) => Value::String(String::from_utf8_lossy(v.as_slice()).into()),
-        v => return Err(ftx.error(format!("cannot convert {:?} to string", v))),
-    })
+// Performs a type conversion on the target.
+pub fn string(_: &FunctionContext, This(this): This<Value>) -> Result<Value> {
+    Ok(this.to_string().into())
 }
 
 /// Returns true if a string starts with another string.
