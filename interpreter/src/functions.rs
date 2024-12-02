@@ -483,7 +483,6 @@ mod tests {
     #[test]
     fn test_size() {
         [
-            ("size of list", "size([1, 2, 3]) == 3"),
             ("size of map", "size({'a': 1, 'b': 2, 'c': 3}) == 3"),
             ("size of string", "size('foo') == 3"),
             ("size as a list method", "[1, 2, 3].size() == 3"),

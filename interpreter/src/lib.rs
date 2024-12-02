@@ -155,12 +155,33 @@ mod tests {
     use crate::context::Context;
     use crate::objects::ResolveResult;
     use crate::Program;
+    use rstest::rstest;
     use std::convert::TryInto;
+    use std::fs;
+    use std::path::PathBuf;
 
     /// Tests the provided script and returns the result. An optional context can be provided.
     pub(crate) fn test_script(script: &str, ctx: Option<Context>) -> ResolveResult {
         let program = Program::compile(script).unwrap();
         program.execute(&ctx.unwrap_or_default())
+    }
+    fn check_script(script: &str, expected: &str) {
+        let program = Program::compile(script).unwrap();
+        let context = Context::default();
+        let result = program.execute(&context);
+        assert_eq!(result.unwrap().to_string(), expected.to_string());
+    }
+
+    #[rstest]
+    fn simple_expressions(#[files("tests/scripts/simple/**/*.cel")] path: PathBuf) {
+        let content = fs::read_to_string(path).expect("Unable to read file");
+        // then there must be a script
+        assert!(!content.is_empty());
+        let parts: Vec<&str> = content.split("---").collect();
+        // with a script and an answer
+        let script = parts[0];
+        let answer = parts[1];
+        check_script(script, answer.trim());
     }
 
     #[test]
