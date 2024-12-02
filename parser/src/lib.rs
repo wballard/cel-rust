@@ -202,7 +202,7 @@ where
                 just(Token::Operator(Operator::Arithmetic(
                     ArithmeticOp::Exponent,
                 ))),
-                |left, op, right| {
+                |left, right| {
                     Expression::Binary(
                         Box::new(left),
                         Operator::Arithmetic(ArithmeticOp::Exponent),
@@ -280,6 +280,13 @@ where
                         Box::new(right),
                     )
                 },
+            ),
+            infix(
+                right(100),
+                just(Token::Question)
+                    .ignore_then(expression.clone())
+                    .then_ignore(just(Token::Colon)),
+                |cond, a, b| Expression::Ternary(Box::new(cond), Box::new(a), Box::new(b)),
             ),
         ))
     })

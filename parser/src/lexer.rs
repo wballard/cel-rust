@@ -20,6 +20,8 @@ pub enum Token {
     Separator,
     Operator(Operator),
     Identifier(Identifier),
+    Question,
+    Colon,
 }
 
 impl Display for Token {
@@ -29,6 +31,8 @@ impl Display for Token {
             Token::Separator => write!(f, ","),
             Token::Operator(op) => write!(f, "{:?}", op),
             Token::Identifier(id) => write!(f, "{}", id),
+            Token::Question => write!(f, "?"),
+            Token::Colon => write!(f, ":"),
             Token::Parens(tokens) => {
                 write!(f, "(")?;
                 for token in tokens {
@@ -87,6 +91,8 @@ pub fn lexer<'a>() -> impl Parser<'a, &'a str, Vec<Spanned<Token>>, extra::Err<R
                 .map(Token::Braces),
             // the basic atoms
             just(',').map(|_| Token::Separator),
+            just('?').map(|_| Token::Question),
+            just(':').map(|_| Token::Colon),
             parse_op().boxed().map(Token::Operator),
             parse_atom().boxed().map(Token::Atom),
             parse_identifier().boxed().map(Token::Identifier),
