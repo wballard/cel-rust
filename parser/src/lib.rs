@@ -88,6 +88,8 @@ where
         Expression::Identifier(x.clone())
     }};
     let atoms = choice((identifier, atom));
+
+    // relation operators with the same level of precedence
     let relations = choice((
         just(Token::Operator(Operator::Relation(RelationOp::Equals))),
         just(Token::Operator(Operator::Relation(RelationOp::NotEquals))),
@@ -100,6 +102,28 @@ where
     ))
     .map(|e| match e {
         Token::Operator(Operator::Relation(op)) => op,
+        _ => unreachable!(),
+    });
+    // different arithmetic precedence levels
+    let arithmetic_high = choice((
+        just(Token::Operator(Operator::Arithmetic(
+            ArithmeticOp::Multiply,
+        ))),
+        just(Token::Operator(Operator::Arithmetic(ArithmeticOp::Divide))),
+        just(Token::Operator(Operator::Arithmetic(ArithmeticOp::Modulus))),
+    ))
+    .map(|e| match e {
+        Token::Operator(Operator::Arithmetic(op)) => op,
+        _ => unreachable!(),
+    });
+    let arithmetic_low = choice((
+        just(Token::Operator(Operator::Arithmetic(ArithmeticOp::Add))),
+        just(Token::Operator(Operator::Arithmetic(
+            ArithmeticOp::Subtract,
+        ))),
+    ))
+    .map(|e| match e {
+        Token::Operator(Operator::Arithmetic(op)) => op,
         _ => unreachable!(),
     });
 
@@ -172,23 +196,26 @@ where
                 };
                 Expression::Multiple([ll, rr].concat())
             }),
-            // logical operators
-            prefix(
-                1000,
-                just(Token::Operator(Operator::Logical(LogicalOp::Not))),
-                |right| Expression::Unary(Operator::Logical(LogicalOp::Not), Box::new(right)),
-            ),
+            // arithmetic operators
             infix(
-                left(100),
-                just(Token::Operator(Operator::Logical(LogicalOp::And))),
-                |left, right| {
+                left(390),
+                just(Token::Operator(Operator::Arithmetic(
+                    ArithmeticOp::Exponent,
+                ))),
+                |left, op, right| {
                     Expression::Binary(
                         Box::new(left),
-                        Operator::Logical(LogicalOp::And),
+                        Operator::Arithmetic(ArithmeticOp::Exponent),
                         Box::new(right),
                     )
                 },
             ),
+            infix(left(380), arithmetic_high, |left, op, right| {
+                Expression::Binary(Box::new(left), Operator::Arithmetic(op), Box::new(right))
+            }),
+            infix(left(370), arithmetic_low, |left, op, right| {
+                Expression::Binary(Box::new(left), Operator::Arithmetic(op), Box::new(right))
+            }),
             // relation operators
             infix(
                 left(290),
@@ -215,6 +242,45 @@ where
             infix(left(270), relations, |left, op, right| {
                 Expression::Binary(Box::new(left), Operator::Relation(op), Box::new(right))
             }),
+            // logical operators
+            prefix(
+                100,
+                just(Token::Operator(Operator::Logical(LogicalOp::Not))),
+                |right| Expression::Unary(Operator::Logical(LogicalOp::Not), Box::new(right)),
+            ),
+            infix(
+                left(90),
+                just(Token::Operator(Operator::Logical(LogicalOp::Xor))),
+                |left, right| {
+                    Expression::Binary(
+                        Box::new(left),
+                        Operator::Logical(LogicalOp::Xor),
+                        Box::new(right),
+                    )
+                },
+            ),
+            infix(
+                left(80),
+                just(Token::Operator(Operator::Logical(LogicalOp::And))),
+                |left, right| {
+                    Expression::Binary(
+                        Box::new(left),
+                        Operator::Logical(LogicalOp::And),
+                        Box::new(right),
+                    )
+                },
+            ),
+            infix(
+                left(70),
+                just(Token::Operator(Operator::Logical(LogicalOp::Or))),
+                |left, right| {
+                    Expression::Binary(
+                        Box::new(left),
+                        Operator::Logical(LogicalOp::Or),
+                        Box::new(right),
+                    )
+                },
+            ),
         ))
     })
 
@@ -404,21 +470,25 @@ mod tests {
     fn map_list_constant() {
         assert_parse_eq(
             "[1, 2, 3].map(x, x * 2)",
-            FunctionCall(
-                "map".into(),
-                Some(Box::new(List(vec![
+            Binary(
+                Box::new(List(vec![
                     Atom(Number(dec!(1))),
                     Atom(Number(dec!(2))),
                     Atom(Number(dec!(3))),
-                ]))),
-                vec![
-                    Identifier("x".into()),
-                    Binary(
-                        Box::new(Identifier("x".into())),
-                        Operator::Arithmetic(ArithmeticOp::Multiply),
-                        Box::new(Atom(Number(dec!(2)))),
-                    ),
-                ],
+                ])),
+                Operator::Relation(RelationOp::GetMember),
+                Box::new(FunctionCall(
+                    "map".into(),
+                    None,
+                    vec![
+                        Identifier("x".into()),
+                        Binary(
+                            Box::new(Identifier("x".into())),
+                            Operator::Arithmetic(ArithmeticOp::Multiply),
+                            Box::new(Atom(Number(dec!(2)))),
+                        ),
+                    ],
+                )),
             ),
         )
     }

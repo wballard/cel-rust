@@ -32,6 +32,7 @@ pub enum LogicalOp {
     And,
     Or,
     Not,
+    Xor,
 }
 
 /// These are enumerated into categories to provide a bit more sepantics for
