@@ -10,7 +10,7 @@ pub enum Expression {
     Unary(Operator, Box<Expression>),
     Binary(Box<Expression>, Operator, Box<Expression>),
     Ternary(Box<Expression>, Box<Expression>, Box<Expression>),
-    FunctionCall(Identifier, Option<Box<Expression>>, Vec<Expression>),
+    FunctionCall(Box<Expression>, Box<Expression>),
     List(Vec<Expression>),
     Tuple(Vec<Expression>),
     Set(Vec<Expression>),
@@ -130,14 +130,9 @@ impl Expression {
                 e2._references(variables, functions);
                 e3._references(variables, functions);
             }
-            Expression::FunctionCall(name, target, args) => {
-                functions.insert(name);
-                if let Some(target) = target {
-                    target._references(variables, functions);
-                }
-                for e in args {
-                    e._references(variables, functions);
-                }
+            Expression::FunctionCall(left, right) => {
+                left._references(variables, functions);
+                right._references(variables, functions);
             }
             Expression::List(e) => {
                 for e in e {

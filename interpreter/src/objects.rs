@@ -526,7 +526,8 @@ impl<'a> Value {
                 Value::Set(list.into()).into()
             }
             Expression::Identifier(name) => ctx.get_variable(name),
-            Expression::FunctionCall(name, target, args) => {
+            Expression::FunctionCall(function, arguments) => {
+                /*
                 let func = ctx
                     .get_function(name)
                     .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone()))?;
@@ -545,6 +546,8 @@ impl<'a> Value {
                         func.call_with_context(&mut ctx)
                     }
                 }
+                */
+                unimplemented!()
             }
             _ => unimplemented!(),
         }

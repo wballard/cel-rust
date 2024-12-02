@@ -129,21 +129,6 @@ where
 
     recursive(|expression| {
         choice((
-            // calls are a function name followed by a list of arguments
-            identifier
-                .then(expression.clone())
-                .map(|(left, right)| match left {
-                    Expression::Identifier(name) => match right {
-                        // identifier and a tuple? -- that's a function call
-                        Expression::Tuple(args) => Expression::FunctionCall(name, None, args),
-
-                        _ => {
-                            print!("hi {:?}", right);
-                            unreachable!()
-                        }
-                    },
-                    _ => unreachable!(),
-                }),
             // simple atoms
             atoms,
             // empty nests
@@ -288,6 +273,10 @@ where
                     .then_ignore(just(Token::Colon)),
                 |cond, a, b| Expression::Ternary(Box::new(cond), Box::new(a), Box::new(b)),
             ),
+            // function call application -- left is the 'to call', right is the arguments
+            infix(left(0), empty(), |left, right| {
+                Expression::FunctionCall(Box::new(left), Box::new(right))
+            }),
         ))
     })
 }
@@ -420,14 +409,17 @@ mod tests {
     fn to_string() {
         assert_parse_eq(
             "[1, 2, 3].string()",
-            Binary(
-                Box::new(List(vec![
-                    Atom(Number(dec!(1))),
-                    Atom(Number(dec!(2))),
-                    Atom(Number(dec!(3))),
-                ])),
-                Operator::Relation(RelationOp::GetMember),
-                Box::new(FunctionCall("string".into(), None, vec![])),
+            FunctionCall(
+                Box::new(Binary(
+                    Box::new(List(vec![
+                        Atom(Number(dec!(1))),
+                        Atom(Number(dec!(2))),
+                        Atom(Number(dec!(3))),
+                    ])),
+                    Operator::Relation(RelationOp::GetMember),
+                    Box::new(Expression::Identifier("string".into())),
+                )),
+                Box::new(Expression::Tuple(vec![])),
             ),
         )
     }
@@ -436,25 +428,24 @@ mod tests {
     fn map_list_constant() {
         assert_parse_eq(
             "[1, 2, 3].map(x, x * 2)",
-            Binary(
-                Box::new(List(vec![
-                    Atom(Number(dec!(1))),
-                    Atom(Number(dec!(2))),
-                    Atom(Number(dec!(3))),
-                ])),
-                Operator::Relation(RelationOp::GetMember),
-                Box::new(FunctionCall(
-                    "map".into(),
-                    None,
-                    vec![
-                        Identifier("x".into()),
-                        Binary(
-                            Box::new(Identifier("x".into())),
-                            Operator::Arithmetic(ArithmeticOp::Multiply),
-                            Box::new(Atom(Number(dec!(2)))),
-                        ),
-                    ],
+            FunctionCall(
+                Box::new(Binary(
+                    Box::new(List(vec![
+                        Atom(Number(dec!(1))),
+                        Atom(Number(dec!(2))),
+                        Atom(Number(dec!(3))),
+                    ])),
+                    Operator::Relation(RelationOp::GetMember),
+                    Box::new(Expression::Identifier("map".into())),
                 )),
+                Box::new(Expression::Tuple(vec![
+                    Identifier("x".into()),
+                    Binary(
+                        Box::new(Identifier("x".into())),
+                        Operator::Arithmetic(ArithmeticOp::Multiply),
+                        Box::new(Atom(Number(dec!(2)))),
+                    ),
+                ])),
             ),
         )
     }
@@ -474,9 +465,9 @@ mod tests {
     */
 
     #[rstest]
-    #[case("a()", FunctionCall("a".into(), None, vec![]))]
-    #[case("a(1)", FunctionCall("a".into(), None, vec![Atom(Number(dec!(1)))]))]
-    #[case("a(x)", FunctionCall("a".into(), None, vec![Identifier("x".into())]))]
+    #[case("a()", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::Tuple(vec![]))))]
+    #[case("a(1)", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::Tuple(vec![Atom(Number(dec!(1)))]))))]
+    #[case("a(x)", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::Tuple(vec![Identifier("x".into())]))))]
     fn function_call(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }
@@ -761,7 +752,10 @@ mod tests {
 
     #[test]
     fn test_foobar() {
-        println!("{:?}", parse("foo.bar.baz == 10 && size(requests) == 3"))
+        println!("{:?}\n", parse("foo.bar.baz"));
+        println!("{:?}\n", parse("foo.bar.baz == 10"));
+        println!("{:?}\n", parse("foo.bar.baz == 10 && true"));
+        println!("{:?}\n", parse("foo.bar.baz == 10 && size(requests) == 3"));
     }
 
     #[rstest]
