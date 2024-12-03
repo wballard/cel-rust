@@ -82,11 +82,13 @@ impl Display for LogicalOp {
 
 /// These are enumerated into categories to provide a bit more sepantics for
 /// the parser and to make it easier to understand the AST.
-#[derive(Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash, Default)]
 pub enum Operator {
     Relation(RelationOp),
     Arithmetic(ArithmeticOp),
     Logical(LogicalOp),
+    #[default]
+    None,
 }
 
 impl Dispatchable for Operator {}
@@ -97,6 +99,7 @@ impl Display for Operator {
             Operator::Relation(op) => write!(f, "{}", op),
             Operator::Arithmetic(op) => write!(f, "{}", op),
             Operator::Logical(op) => write!(f, "{}", op),
+            Operator::None => write!(f, ""),
         }
     }
 }

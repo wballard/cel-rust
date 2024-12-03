@@ -1,5 +1,6 @@
 use crate::function_registry::{Function, FunctionRegistry, Handler};
 use crate::objects::Value;
+use crate::operators::*;
 use crate::{functions, ExecutionError};
 use cel_parser::*;
 use std::collections::HashMap;
@@ -32,6 +33,7 @@ use std::collections::HashMap;
 pub enum Context<'a> {
     Root {
         functions: FunctionRegistry<Identifier>,
+        operators: FunctionRegistry<Operator>,
         variables: HashMap<Identifier, Value>,
     },
     Child {
@@ -94,6 +96,23 @@ impl<'a> Context<'a> {
         };
     }
 
+    pub fn add_operator<ID, T: 'static, F>(&mut self, name: ID, value: F)
+    where
+        ID: Into<Operator>,
+        F: Handler<T> + 'static + Send + Sync,
+    {
+        if let Context::Root { operators, .. } = self {
+            operators.add(&name.into(), value);
+        };
+    }
+
+    pub(crate) fn get_operator(&self, name: &Operator) -> Option<Box<dyn Function>> {
+        match self {
+            Context::Root { operators, .. } => operators.get(name),
+            Context::Child { parent, .. } => parent.get_operator(name),
+        }
+    }
+
     pub fn resolve(&self, expr: &Expression) -> Result<Value, ExecutionError> {
         Value::resolve(expr, self)
     }
@@ -123,6 +142,7 @@ impl<'a> Context<'a> {
         Context::Root {
             variables: Default::default(),
             functions: Default::default(),
+            operators: Default::default(),
         }
     }
 }
@@ -132,7 +152,10 @@ impl<'a> Default for Context<'a> {
         let mut ctx = Context::Root {
             variables: Default::default(),
             functions: Default::default(),
+            operators: Default::default(),
         };
+        ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Add), add);
+        ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Subtract), sub);
 
         ctx.add_function("contains", functions::contains);
         ctx.add_function("size", functions::size);

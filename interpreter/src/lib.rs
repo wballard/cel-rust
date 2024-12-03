@@ -17,8 +17,10 @@ pub mod functions;
 mod magic;
 pub mod objects;
 mod resolvers;
-
 use magic::FromContext;
+
+// ops!
+mod operators;
 
 #[derive(Error, Debug, PartialEq, Clone)]
 pub enum ExecutionError {
@@ -52,6 +54,9 @@ pub enum ExecutionError {
     /// Indicates that an operator was used on a type that does not support it.
     #[error("Unsupported unary operator '{0}': {1:?}")]
     UnsupportedUnaryOperator(&'static str, Value),
+    /// Attemping to use an operator that is not defined.
+    #[error("Undefined operator '{0}'")]
+    UndefinedOperator(Operator),
     /// Indicates that an unsupported binary operator was applied on two values
     /// where it's unsupported, for example list + map.
     #[error("Unsupported binary operator '{0}': {1:?}, {2:?}")]
@@ -207,8 +212,10 @@ mod tests {
         }
 
         // Test methods
-        assert_output("size([1, 2, 3]) == 3", Ok(true.into()));
-        assert_output("size([]) == 3", Ok(false.into()));
+        assert_output("size(arr) == 3", Ok(true.into()));
+        assert_output("arr.size() == 3", Ok(false.into()));
+        assert_output("size(str) == 6", Ok(true.into()));
+        assert_output("str.size() == 6", Ok(false.into()));
 
         // Test that we can index into an array
         assert_output("arr[0] == 1", Ok(true.into()));

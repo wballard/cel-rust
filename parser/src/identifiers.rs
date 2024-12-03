@@ -115,7 +115,7 @@ pub fn parse_bool<'a>() -> impl Parser<'a, &'a str, bool, extra::Err<Rich<'a, ch
 ///
 /// Subsequence characters include any Unicode Identifier character or emoji.
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Default)]
-pub struct Identifier(String);
+pub struct Identifier(pub String);
 
 impl Dispatchable for Identifier {}
 

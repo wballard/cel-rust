@@ -304,8 +304,8 @@ mod tests {
         assert_eq!(parse(input), expected);
     }
     #[rstest]
-    #[case("a", Identifier("a".into()))]
-    #[case("hello ", Identifier("hello".into()))]
+    #[case("a", Expression::Identifier("a".into()))]
+    #[case("hello ", Expression::Identifier("hello".into()))]
     fn identifiers(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }
@@ -442,9 +442,9 @@ mod tests {
                     Box::new(Expression::Identifier("map".into())),
                 )),
                 Box::new(Expression::Tuple(vec![
-                    Identifier("x".into()),
+                    Expression::Identifier("x".into()),
                     Binary(
-                        Box::new(Identifier("x".into())),
+                        Box::new(Expression::Identifier("x".into())),
                         Operator::Arithmetic(ArithmeticOp::Multiply),
                         Box::new(Atom(Number(dec!(2)))),
                     ),
@@ -470,7 +470,7 @@ mod tests {
     #[rstest]
     #[case("a()", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::Tuple(vec![]))))]
     #[case("a(1)", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::Tuple(vec![Atom(Number(dec!(1)))]))))]
-    #[case("a(x)", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::Tuple(vec![Identifier("x".into())]))))]
+    #[case("a(x)", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::Tuple(vec![Expression::Identifier("x".into())]))))]
     fn function_call(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }
@@ -731,19 +731,19 @@ mod tests {
 
     #[rstest]
     #[case("a && b == 'string'", Binary(
-        Box::new(Identifier("a".into())),
+        Box::new(Expression::Identifier("a".into())),
         Operator::Logical(LogicalOp::And),
         Box::new(Binary(
-            Box::new(Identifier("b".into())),
+            Box::new(Expression::Identifier("b".into())),
             Operator::Relation(RelationOp::Equals),
             Box::new(Expression::Atom(String("string".to_string()))),
         )),
     ))]
     #[case("a && b || 'string'", Binary(
             Box::new(Binary(
-                Box::new(Identifier("a".into())),
+                Box::new(Expression::Identifier("a".into())),
                 Operator::Logical(LogicalOp::And),
-                Box::new(Identifier("b".into())),
+                Box::new(Expression::Identifier("b".into())),
             )),
             Operator::Logical(LogicalOp::Or),
             Box::new(Expression::Atom(String("string".to_string()))),

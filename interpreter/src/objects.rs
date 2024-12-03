@@ -1,6 +1,7 @@
 use crate::context::Context;
 use crate::Atom;
 use crate::ExecutionError;
+use crate::FunctionContext;
 use cel_parser::*;
 use chrono::SecondsFormat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
@@ -408,39 +409,18 @@ impl<'a> Value {
         match expr {
             Expression::Atom(atom) => Ok(atom.into()),
             Expression::Binary(left, op, right) => {
-                let left = Value::resolve(left, ctx)?;
-                let right = Value::resolve(right, ctx)?;
-                match op {
-                    Operator::Arithmetic(ArithmeticOp::Add) => left + right,
-                    Operator::Arithmetic(ArithmeticOp::Subtract) => left - right,
-                    Operator::Arithmetic(ArithmeticOp::Divide) => left / right,
-                    Operator::Arithmetic(ArithmeticOp::Multiply) => left * right,
-                    Operator::Arithmetic(ArithmeticOp::Modulus) => left % right,
-                    Operator::Arithmetic(ArithmeticOp::Exponent) => {
-                        let ll = left.to_decimal()?;
-                        let rr = right.to_decimal()?;
-                        Ok(ll.powd(rr).into())
-                    }
-                    _ => Err(ExecutionError::UnsupportedBinaryOperator(
-                        op.clone(),
-                        left,
-                        right,
-                    )),
-                }
+                let func = ctx
+                    .get_operator(op)
+                    .ok_or_else(|| ExecutionError::UndefinedOperator(op.clone()))?;
+                let mut ctx = FunctionContext::new(
+                    Identifier(op.to_string()),
+                    None,
+                    ctx,
+                    vec![*left.clone(), *right.clone()],
+                );
+                func.call_with_context(&mut ctx)
             }
             /*
-            Expression::Arithmetic(left, op, right) => {
-                let left = Value::resolve(left, ctx)?;
-                let right = Value::resolve(right, ctx)?;
-
-                match op {
-                    ArithmeticOp::Add => left + right,
-                    ArithmeticOp::Subtract => left - right,
-                    ArithmeticOp::Divide => left / right,
-                    ArithmeticOp::Multiply => left * right,
-                    ArithmeticOp::Modulus => left % right,
-                }
-            }
             Expression::Relation(left, op, right) => {
                 let left = Value::resolve(left, ctx)?;
                 let right = Value::resolve(right, ctx)?;
@@ -656,94 +636,6 @@ impl From<&Atom> for Value {
             Atom::DateTime(v) => Value::Timestamp(*v),
             Atom::Duration(v) => Value::Duration(*v),
             Atom::HashTag(v) => Value::HashTag(v.clone()),
-        }
-    }
-}
-
-impl ops::Add<Value> for Value {
-    type Output = ResolveResult;
-
-    #[inline(always)]
-    fn add(self, rhs: Value) -> Self::Output {
-        match (self, rhs) {
-            (Value::Bool(l), Value::Bool(r)) => Value::Bool(l || r).into(),
-            (Value::Number(l), Value::Number(r)) => Value::Number(l + r).into(),
-            (Value::List(l), Value::List(r)) => Value::List(
-                l.list
-                    .iter()
-                    .chain(r.list.iter())
-                    .cloned()
-                    .collect::<Vec<_>>()
-                    .into(),
-            )
-            .into(),
-            (Value::String(l), Value::String(r)) => {
-                let mut new = String::with_capacity(l.len() + r.len());
-                new.push_str(&l);
-                new.push_str(&r);
-                Value::String(new).into()
-            }
-            (Value::String(l), Value::Number(r)) => {
-                let mut new = String::with_capacity(l.len() + 1);
-                new.push_str(&l);
-                new.push_str(&r.to_string());
-                Value::String(new).into()
-            }
-            (Value::Number(l), Value::String(r)) => {
-                let mut new = String::with_capacity(r.len() + 1);
-                new.push_str(&l.to_string());
-                new.push_str(&r);
-                Value::String(new).into()
-            }
-
-            (Value::Duration(l), Value::Duration(r)) => Value::Duration(l + r).into(),
-            (Value::Timestamp(l), Value::Duration(r)) => Value::Timestamp(l + r).into(),
-            (Value::Duration(l), Value::Timestamp(r)) => Value::Timestamp(r + l).into(),
-
-            (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                Operator::Arithmetic(ArithmeticOp::Add),
-                left,
-                right,
-            )),
-        }
-    }
-}
-
-impl ops::Add<Value> for &Value {
-    type Output = ResolveResult;
-
-    #[inline(always)]
-    fn add(self, rhs: Value) -> Self::Output {
-        let lhs = self.clone();
-        lhs.add(rhs)
-    }
-}
-
-impl ops::Add<&Value> for Value {
-    type Output = ResolveResult;
-
-    #[inline(always)]
-    fn add(self, rhs: &Value) -> Self::Output {
-        self.add(rhs.clone())
-    }
-}
-
-impl ops::Sub<Value> for Value {
-    type Output = ResolveResult;
-
-    #[inline(always)]
-    fn sub(self, rhs: Value) -> Self::Output {
-        match (self, rhs) {
-            (Value::Number(l), Value::Number(r)) => Value::Number(l - r).into(),
-            (Value::Duration(l), Value::Duration(r)) => Value::Duration(l - r).into(),
-            (Value::Timestamp(l), Value::Duration(r)) => Value::Timestamp(l - r).into(),
-            (Value::Timestamp(l), Value::Timestamp(r)) => Value::Duration(l - r).into(),
-
-            (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                Operator::Arithmetic(ArithmeticOp::Subtract),
-                left,
-                right,
-            )),
         }
     }
 }
