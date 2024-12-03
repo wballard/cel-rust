@@ -6,7 +6,6 @@ use cel_parser::*;
 use chrono::SecondsFormat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
 use rust_decimal::Decimal;
-use rust_decimal::MathematicalOps;
 use rust_decimal_macros::dec;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -64,17 +63,18 @@ pub enum Value {
     HashTag(HashTag),
 }
 
-impl Value {
-    /// Strings and numbers can turn into decimals.
-    fn to_decimal(&self) -> Result<Decimal, ExecutionError> {
-        match self {
-            Value::Number(v) => Ok(*v),
+impl TryFrom<Value> for Decimal {
+    type Error = ExecutionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Number(v) => Ok(v),
             Value::String(v) => v.parse().map_err(|_| ExecutionError::UnexpectedType {
-                got: v.clone(),
+                got: v,
                 want: "number".to_string(),
             }),
             _ => Err(ExecutionError::UnexpectedType {
-                got: self.type_of().to_string(),
+                got: value.type_of().to_string(),
                 want: "number".to_string(),
             }),
         }
@@ -529,6 +529,22 @@ impl<'a> Value {
             }
             Expression::Identifier(name) => ctx.get_variable(name),
             Expression::FunctionCall(function, arguments) => {
+                let arguments = match &**arguments {
+                    Expression::Tuple(args) => args,
+                    _ => unimplemented!(),
+                };
+
+                match &**function {
+                    Expression::Identifier(name) => {
+                        let func = ctx
+                            .get_function(name)
+                            .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone()))?;
+                        let mut ctx =
+                            FunctionContext::new(name.clone(), None, ctx, arguments.clone());
+                        func.call_with_context(&mut ctx)
+                    }
+                    _ => unimplemented!(),
+                }
                 /*
                 let func = ctx
                     .get_function(name)
@@ -549,7 +565,6 @@ impl<'a> Value {
                     }
                 }
                 */
-                unimplemented!()
             }
             _ => unimplemented!(),
         }

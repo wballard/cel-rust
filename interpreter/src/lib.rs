@@ -174,6 +174,7 @@ mod tests {
 
     fn check_script(script: &str, expected: &str) {
         let program = Program::compile(script).unwrap();
+        print!("{:?} => ", program);
         let context = Context::default();
         let result = program.execute(&context);
         assert_eq!(result.unwrap().to_string(), expected.to_string());

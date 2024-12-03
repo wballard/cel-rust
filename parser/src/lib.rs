@@ -206,7 +206,7 @@ where
             }),
             // relation operators
             infix(
-                left(290),
+                left(20000),
                 just(Token::Operator(Operator::Relation(RelationOp::GetMember))),
                 |left, right| {
                     Expression::Binary(
@@ -277,7 +277,7 @@ where
                 |cond, a, b| Expression::Ternary(Box::new(cond), Box::new(a), Box::new(b)),
             ),
             // function call application -- left is the 'to call', right is the arguments
-            infix(left(0), empty(), |left, right| {
+            infix(left(10000), empty(), |left, right| {
                 Expression::FunctionCall(Box::new(left), Box::new(right))
             }),
         ))
