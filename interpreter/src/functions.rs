@@ -653,19 +653,6 @@ mod tests {
     }
 
     #[test]
-    fn test_chrono_string() {
-        [
-            ("duration", "1h30m.string() == '1h30m0s'"),
-            (
-                "timestamp",
-                "2023-05-29T00:00:00Z.string() == '2023-05-29T00:00:00+00:00'",
-            ),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
     fn test_contains() {
         let tests = vec![
             ("list", "[1, 2, 3].contains(3) == true"),

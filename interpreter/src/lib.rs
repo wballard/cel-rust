@@ -177,6 +177,7 @@ mod tests {
         print!("{:?} => ", program);
         let context = Context::default();
         let result = program.execute(&context);
+        print!("{:?} => ", result);
         assert_eq!(result.unwrap().to_string(), expected.to_string());
     }
 

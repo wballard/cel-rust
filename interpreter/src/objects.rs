@@ -178,7 +178,7 @@ impl Display for Value {
             Value::String(v) => write!(f, "'{}'", v.replace("'", "\\'")),
             Value::Bool(v) => write!(f, "{}", v),
             Value::Null => write!(f, "null"),
-            Value::Duration(v) => write!(f, "{}", v),
+            Value::Duration(v) => write!(f, "{}s", v.num_seconds()),
             Value::Timestamp(v) => write!(f, "{}", v.to_rfc3339_opts(SecondsFormat::Millis, true)),
             Value::Ulid(v) => write!(f, "{}", v),
             Value::HashTag(v) => write!(f, "{}", v),
@@ -361,7 +361,7 @@ impl From<Value> for String {
             Value::Bool(v) => format!("{}", v),
             Value::Number(v) => format!("{}", v),
             Value::Null => "".to_string(),
-            Value::Duration(v) => v.to_string(),
+            Value::Duration(v) => format!("{}", v),
             Value::Timestamp(v) => v.to_rfc3339(),
             Value::Ulid(v) => v.to_string(),
             Value::List(v) => {
@@ -543,6 +543,26 @@ impl<'a> Value {
                             FunctionContext::new(name.clone(), None, ctx, arguments.clone());
                         func.call_with_context(&mut ctx)
                     }
+                    Expression::Binary(
+                        target,
+                        Operator::Relation(RelationOp::GetMember),
+                        function_name,
+                    ) => match &**function_name {
+                        Expression::Identifier(name) => {
+                            let target = Value::resolve(target, ctx)?;
+                            let func = ctx
+                                .get_function(name)
+                                .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone()))?;
+                            let mut ctx = FunctionContext::new(
+                                name.clone(),
+                                Some(target),
+                                ctx,
+                                arguments.clone(),
+                            );
+                            func.call_with_context(&mut ctx)
+                        }
+                        _ => unimplemented!(),
+                    },
                     _ => unimplemented!(),
                 }
                 /*

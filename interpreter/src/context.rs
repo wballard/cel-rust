@@ -157,6 +157,13 @@ impl<'a> Default for Context<'a> {
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Add), add);
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Subtract), sub);
         ctx.add_operator(Operator::Relation(RelationOp::Equals), eq);
+        ctx.add_operator(Operator::Relation(RelationOp::NotEquals), neq);
+        ctx.add_operator(Operator::Relation(RelationOp::LessThan), lt);
+        ctx.add_operator(Operator::Relation(RelationOp::LessThanEq), lte);
+        ctx.add_operator(Operator::Relation(RelationOp::GreaterThan), gt);
+        ctx.add_operator(Operator::Relation(RelationOp::GreaterThanEq), gte);
+        ctx.add_operator(Operator::Relation(RelationOp::In), is_in);
+        // TODO: do we actually need a member operator implementation?
 
         ctx.add_function("contains", functions::contains);
         ctx.add_function("size", functions::size);

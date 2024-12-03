@@ -28,7 +28,7 @@ impl Display for Atom {
             Atom::Null => write!(f, "null"),
             Atom::Ulid(u) => write!(f, "{}", u),
             Atom::DateTime(d) => write!(f, "{}", d),
-            Atom::Duration(d) => write!(f, "{}", d),
+            Atom::Duration(d) => write!(f, "{}s", d.num_seconds()),
             Atom::HashTag(h) => write!(f, "{}", h),
         }
     }
