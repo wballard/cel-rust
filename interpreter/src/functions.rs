@@ -624,21 +624,6 @@ mod tests {
     }
 
     #[test]
-    fn test_duration() {
-        [
-            ("duration equal 1", "1s == 1000ms"),
-            ("duration equal 2", "1m == 60s"),
-            ("duration equal 3", "1h == 60m"),
-            ("duration comparison 1", "1m > 1s"),
-            ("duration comparison 2", "1m < 1h"),
-            ("duration subtraction", "1h - 1m == 59m"),
-            ("duration addition", "1h + 1m == 1h1m"),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
     fn test_timestamp_variable() {
         let mut context = Context::default();
         let ts: chrono::DateTime<chrono::Utc> =

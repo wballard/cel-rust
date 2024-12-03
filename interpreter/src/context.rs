@@ -154,8 +154,15 @@ impl<'a> Default for Context<'a> {
             functions: Default::default(),
             operators: Default::default(),
         };
+
+        // match magic 🪄
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Add), add);
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Subtract), sub);
+        ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Multiply), mul);
+        ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Divide), div);
+        ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Exponent), pow);
+        ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Modulus), rem);
+
         ctx.add_operator(Operator::Relation(RelationOp::Equals), eq);
         ctx.add_operator(Operator::Relation(RelationOp::NotEquals), neq);
         ctx.add_operator(Operator::Relation(RelationOp::LessThan), lt);

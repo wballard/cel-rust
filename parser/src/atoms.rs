@@ -23,7 +23,7 @@ impl Display for Atom {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Atom::Number(n) => write!(f, "{}", n),
-            Atom::String(s) => write!(f, "\"{}\"", s),
+            Atom::String(s) => write!(f, "{}", s),
             Atom::Bool(b) => write!(f, "{}", b),
             Atom::Null => write!(f, "null"),
             Atom::Ulid(u) => write!(f, "{}", u),

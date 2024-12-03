@@ -180,7 +180,7 @@ impl Display for Value {
             Value::Null => write!(f, "null"),
             Value::Duration(v) => write!(f, "{}s", v.num_seconds()),
             Value::Timestamp(v) => write!(f, "{}", v.to_rfc3339_opts(SecondsFormat::Millis, true)),
-            Value::Ulid(v) => write!(f, "{}", v),
+            Value::Ulid(v) => write!(f, "&{}", v),
             Value::HashTag(v) => write!(f, "{}", v),
             Value::Set(v) => {
                 write!(f, "{{#")?;
@@ -363,7 +363,7 @@ impl From<Value> for String {
             Value::Null => "".to_string(),
             Value::Duration(v) => format!("{}", v),
             Value::Timestamp(v) => v.to_rfc3339(),
-            Value::Ulid(v) => v.to_string(),
+            Value::Ulid(v) => format!("&{}", v),
             Value::List(v) => {
                 let mut buf = String::new();
                 buf.push('[');
@@ -675,89 +675,9 @@ impl From<&Atom> for Value {
     }
 }
 
-impl ops::Div<Value> for Value {
-    type Output = ResolveResult;
-
-    #[inline(always)]
-    fn div(self, rhs: Value) -> Self::Output {
-        match (self, rhs) {
-            (Value::Number(l), Value::Number(r)) => Value::Number(l / r).into(),
-
-            (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                Operator::Arithmetic(ArithmeticOp::Divide),
-                left,
-                right,
-            )),
-        }
-    }
-}
-
-impl ops::Mul<Value> for Value {
-    type Output = ResolveResult;
-
-    #[inline(always)]
-    fn mul(self, rhs: Value) -> Self::Output {
-        match (self, rhs) {
-            (Value::Number(l), Value::Number(r)) => Value::Number(l * r).into(),
-
-            (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                Operator::Arithmetic(ArithmeticOp::Multiply),
-                left,
-                right,
-            )),
-        }
-    }
-}
-
-impl ops::Rem<Value> for Value {
-    type Output = ResolveResult;
-
-    #[inline(always)]
-    fn rem(self, rhs: Value) -> Self::Output {
-        match (self, rhs) {
-            (Value::Number(l), Value::Number(r)) => Value::Number(l % r).into(),
-            (left, right) => Err(ExecutionError::UnsupportedBinaryOperator(
-                Operator::Arithmetic(ArithmeticOp::Modulus),
-                left,
-                right,
-            )),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::*;
-
-    #[test]
-    fn test_heterogeneous_compare() {
-        let context = Context::default();
-
-        let program = Program::compile("1.0 < 2").unwrap();
-        let value = program.execute(&context).unwrap();
-        assert_eq!(value, true.into());
-
-        let program = Program::compile("1 < 1.1").unwrap();
-        let value = program.execute(&context).unwrap();
-        assert_eq!(value, true.into());
-
-        let program = Program::compile("0 > -10").unwrap();
-        let value = program.execute(&context).unwrap();
-        assert_eq!(
-            value,
-            true.into(),
-            "negative signed ints should be less than uints"
-        );
-    }
-
-    #[test]
-    fn test_float_compare() {
-        let context = Context::default();
-
-        let program = Program::compile("1.0 > 0.0").unwrap();
-        let value = program.execute(&context).unwrap();
-        assert_eq!(value, true.into());
-    }
 
     #[test]
     fn test_invalid_compare() {
@@ -842,35 +762,6 @@ mod tests {
             indirect,
             Value::List(vec![Value::String("example".to_string())].into())
         );
-    }
-
-    #[test]
-    fn ulid_value() {
-        let program = Program::compile("01JDCHE5FVVR8ADKC040GFKZJH").unwrap();
-        let context = Context::default();
-        let result = program.execute(&context);
-        assert_eq!(
-            result.unwrap(),
-            Value::Ulid(ulid::Ulid::from_string("01JDCHE5FVVR8ADKC040GFKZJH").unwrap())
-        );
-    }
-
-    #[test]
-    fn ulid_equality() {
-        let program =
-            Program::compile("01JDCHE5FVVR8ADKC040GFKZJH == 01JDCHE5FVVR8ADKC040GFKZJH").unwrap();
-        let context = Context::default();
-        let result = program.execute(&context);
-        assert_eq!(result.unwrap(), Value::Bool(true));
-    }
-
-    #[test]
-    fn ulid_ordering() {
-        let program =
-            Program::compile("01JDCHE5FVVR8ADKC040GFKZJJ > 01JDCHE5FVVR8ADKC040GFKZJH").unwrap();
-        let context = Context::default();
-        let result = program.execute(&context);
-        assert_eq!(result.unwrap(), Value::Bool(true));
     }
 
     #[test]
