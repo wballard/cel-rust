@@ -156,6 +156,7 @@ impl<'a> Default for Context<'a> {
         };
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Add), add);
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Subtract), sub);
+        ctx.add_operator(Operator::Relation(RelationOp::Equals), eq);
 
         ctx.add_function("contains", functions::contains);
         ctx.add_function("size", functions::size);
