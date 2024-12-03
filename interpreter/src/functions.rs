@@ -5,7 +5,6 @@ use crate::resolvers::{Argument, Resolver};
 use crate::ExecutionError;
 use cel_parser::*;
 use std::cmp::Ordering;
-use std::convert::TryInto;
 
 type Result<T> = std::result::Result<T, ExecutionError>;
 
@@ -166,7 +165,6 @@ pub fn ends_with(This(this): This<Value>, suffix: Value) -> bool {
 /// ```cel
 /// "abc".matches("^[a-z]*$") == true
 /// ```
-#[cfg(feature = "regex")]
 pub fn matches(ftx: &FunctionContext, This(this): This<Value>, regex: Value) -> Result<bool> {
     let haystack: String = this.into();
     let pattern: String = regex.into();

@@ -61,7 +61,7 @@ macro_rules! impl_handler {
             where
                 F: Fn($($t,)*) -> R + Clone,
                 $($t: for<'a, 'context> $crate::FromContext<'a, 'context>,)*
-                R: IntoResolveResult,
+                R: crate::magic::IntoResolveResult,
             {
                 fn call(self, _ftx: &mut FunctionContext) -> ResolveResult {
                     $(
@@ -75,7 +75,7 @@ macro_rules! impl_handler {
             where
                 F: Fn(&FunctionContext, $($t,)*) -> R + Clone,
                 $($t: for<'a, 'context> $crate::FromContext<'a, 'context>,)*
-                R: IntoResolveResult,
+                R: crate::magic::IntoResolveResult,
             {
                 fn call(self, _ftx: &mut FunctionContext) -> ResolveResult {
                     $(

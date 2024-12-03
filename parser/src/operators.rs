@@ -3,6 +3,8 @@
 use chumsky::prelude::*;
 use std::fmt::Display;
 
+use crate::Dispatchable;
+
 /// Represents a relational operator in an expression.
 #[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum RelationOp {
@@ -86,6 +88,8 @@ pub enum Operator {
     Arithmetic(ArithmeticOp),
     Logical(LogicalOp),
 }
+
+impl Dispatchable for Operator {}
 
 impl Display for Operator {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

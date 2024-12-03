@@ -32,6 +32,9 @@ use lexer::*;
 mod atoms;
 pub use atoms::*;
 
+mod markers;
+pub use markers::*;
+
 /// Parses a CEL expression into an AST ready for analysis and evaluation.
 ///
 /// # Example

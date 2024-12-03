@@ -1,8 +1,6 @@
 use crate::context::Context;
-use crate::functions::FunctionContext;
 use crate::Atom;
 use crate::ExecutionError;
-use base64;
 use cel_parser::*;
 use chrono::SecondsFormat;
 use rust_decimal::prelude::{FromPrimitive, ToPrimitive};
@@ -354,14 +352,6 @@ impl From<ulid::Ulid> for Value {
         Value::Ulid(ulid)
     }
 }
-use base64::{
-    alphabet,
-    engine::{self, general_purpose},
-    Engine as _,
-};
-
-const CUSTOM_ENGINE: engine::GeneralPurpose =
-    engine::GeneralPurpose::new(&alphabet::URL_SAFE, general_purpose::NO_PAD);
 
 impl From<Value> for String {
     fn from(value: Value) -> Self {

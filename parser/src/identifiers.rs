@@ -1,7 +1,9 @@
 use chumsky::prelude::*;
+use chumsky::Parser;
 use std::fmt;
 use ulid::Ulid;
-use chumsky::Parser;
+
+use crate::Dispatchable;
 
 /// Parses a ULID (Universally Unique Lexicographically Sortable Identifier) from a string slice.
 ///
@@ -112,8 +114,10 @@ pub fn parse_bool<'a>() -> impl Parser<'a, &'a str, bool, extra::Err<Rich<'a, ch
 /// The first character in a [Unicode Identifier](https://www.unicode.org/reports/tr31/#Default_Identifier_Syntax).
 ///
 /// Subsequence characters include any Unicode Identifier character or emoji.
-#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone, Default)]
 pub struct Identifier(String);
+
+impl Dispatchable for Identifier {}
 
 impl From<&str> for Identifier {
     fn from(s: &str) -> Self {
@@ -175,7 +179,6 @@ pub fn parse_identifier<'a>() -> impl Parser<'a, &'a str, Identifier, extra::Err
     let body_pattern = r"[\p{ID_Start}\p{Emoji}_&&[^\d]][\p{XID_Continue}\p{Emoji}_&&[^\d]]*";
     regex(body_pattern).map(|s: &str| s.into())
 }
-
 
 #[cfg(test)]
 mod tests {

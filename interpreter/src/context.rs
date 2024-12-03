@@ -1,4 +1,4 @@
-use crate::magic::{Function, FunctionRegistry, Handler};
+use crate::function_registry::{Function, FunctionRegistry, Handler};
 use crate::objects::Value;
 use crate::{functions, ExecutionError};
 use cel_parser::*;
@@ -31,7 +31,7 @@ use std::collections::HashMap;
 ///
 pub enum Context<'a> {
     Root {
-        functions: FunctionRegistry,
+        functions: FunctionRegistry<Identifier>,
         variables: HashMap<Identifier, Value>,
     },
     Child {
@@ -89,9 +89,8 @@ impl<'a> Context<'a> {
         ID: Into<Identifier>,
         F: Handler<T> + 'static + Send + Sync,
     {
-        let identifier = name.into();
         if let Context::Root { functions, .. } = self {
-            functions.add(&identifier, value);
+            functions.add(&name.into(), value);
         };
     }
 
@@ -149,7 +148,6 @@ impl<'a> Default for Context<'a> {
         ctx.add_function("exists", functions::exists);
         ctx.add_function("exists_one", functions::exists_one);
 
-        #[cfg(feature = "regex")]
         ctx.add_function("matches", functions::matches);
 
         {
