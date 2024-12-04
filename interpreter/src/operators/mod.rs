@@ -12,3 +12,5 @@ mod rem;
 pub use rem::rem;
 mod pow;
 pub use pow::pow;
+mod bool;
+pub use bool::*;

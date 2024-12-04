@@ -155,13 +155,19 @@ impl<'a> Default for Context<'a> {
             operators: Default::default(),
         };
 
-        // match magic 🪄
+        // math magic 🪄
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Add), add);
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Subtract), sub);
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Multiply), mul);
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Divide), div);
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Exponent), pow);
         ctx.add_operator(Operator::Arithmetic(ArithmeticOp::Modulus), rem);
+
+        // boolean logic
+        ctx.add_operator(Operator::Logical(LogicalOp::And), and);
+        ctx.add_operator(Operator::Logical(LogicalOp::Or), or);
+        ctx.add_operator(Operator::Logical(LogicalOp::Xor), xor);
+        ctx.add_operator(Operator::Logical(LogicalOp::Not), not);
 
         ctx.add_operator(Operator::Relation(RelationOp::Equals), eq);
         ctx.add_operator(Operator::Relation(RelationOp::NotEquals), neq);

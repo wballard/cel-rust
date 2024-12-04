@@ -10,7 +10,6 @@ use rust_decimal_macros::dec;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
-use std::ops;
 
 #[derive(Debug, PartialEq, Clone, Hash, PartialOrd, Ord, Eq)]
 pub struct ValueList {
@@ -145,29 +144,28 @@ impl Value {
     }
 }
 
+fn delimit_display<'a, T: Iterator<Item = &'a Value>>(
+    vals: T,
+    open: char,
+    close: char,
+    f: &mut Formatter<'_>,
+) -> std::fmt::Result {
+    write!(f, "{}", open)?;
+    for (i, v) in vals.enumerate() {
+        if i > 0 {
+            write!(f, ", ")?;
+        }
+        write!(f, "{}", v)?;
+    }
+    write!(f, "{}", close)
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::List(v) => {
-                write!(f, "[")?;
-                for (i, v) in v.list.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", v)?;
-                }
-                write!(f, "]")
-            }
-            Value::Tuple(v) => {
-                write!(f, "(")?;
-                for (i, v) in v.list.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", v)?;
-                }
-                write!(f, "(")
-            }
+            Value::List(v) => delimit_display(v.list.iter(), '[', ']', f),
+            Value::Tuple(v) => delimit_display(v.list.iter(), '(', ')', f),
+            Value::Set(v) => delimit_display(v.set.iter(), '{', '}', f),
             Value::Function(name, target) => match target {
                 Some(target) => write!(f, "{}.{}", target, name),
                 None => write!(f, "{}", name),
@@ -182,16 +180,6 @@ impl Display for Value {
             Value::Timestamp(v) => write!(f, "{}", v.to_rfc3339_opts(SecondsFormat::Millis, true)),
             Value::Ulid(v) => write!(f, "&{}", v),
             Value::HashTag(v) => write!(f, "{}", v),
-            Value::Set(v) => {
-                write!(f, "{{#")?;
-                for (i, v) in v.set.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", v)?;
-                }
-                write!(f, "}}#")
-            }
         }
     }
 }
@@ -354,6 +342,22 @@ impl From<ulid::Ulid> for Value {
     }
 }
 
+fn delimit<'a, T: Iterator<Item = &'a Value>>(vals: T, open: char, close: char) -> String {
+    let mut buf = String::new();
+    buf.push(open);
+    for (i, v) in vals.enumerate() {
+        if i > 0 {
+            buf.push_str(", ");
+        }
+        // using the `into` conversion to get the unquoted version
+        let s: String = v.clone().into();
+        buf.push_str(s.as_str())
+    }
+    buf.push(close);
+    buf
+}
+
+/// These are the `into` versions -- without quotes and escapes.
 impl From<Value> for String {
     fn from(value: Value) -> Self {
         match value {
@@ -364,18 +368,9 @@ impl From<Value> for String {
             Value::Duration(v) => format!("{}", v),
             Value::Timestamp(v) => v.to_rfc3339(),
             Value::Ulid(v) => format!("&{}", v),
-            Value::List(v) => {
-                let mut buf = String::new();
-                buf.push('[');
-                for (i, v) in v.list.iter().enumerate() {
-                    if i > 0 {
-                        buf.push_str(", ");
-                    }
-                    buf.push_str(&String::from(v.clone()));
-                }
-                buf.push(']');
-                buf
-            }
+            Value::List(v) => delimit(v.list.iter(), '[', ']'),
+            Value::Tuple(v) => delimit(v.list.iter(), '(', ')'),
+            Value::Set(v) => delimit(v.set.iter(), '{', '}'),
             _ => "".to_string(),
         }
     }
@@ -408,6 +403,18 @@ impl<'a> Value {
     pub fn resolve(expr: &'a Expression, ctx: &Context) -> ResolveResult {
         match expr {
             Expression::Atom(atom) => Ok(atom.into()),
+            Expression::Unary(op, right) => {
+                let func = ctx
+                    .get_operator(op)
+                    .ok_or_else(|| ExecutionError::UndefinedOperator(op.clone()))?;
+                let mut ctx = FunctionContext::new(
+                    Identifier(op.to_string()),
+                    None,
+                    ctx,
+                    vec![*right.clone()],
+                );
+                func.call_with_context(&mut ctx)
+            }
             Expression::Binary(left, op, right) => {
                 let func = ctx
                     .get_operator(op)
@@ -639,7 +646,7 @@ impl<'a> Value {
     }
 
     #[inline(always)]
-    fn to_bool(&self) -> bool {
+    pub fn to_bool(&self) -> bool {
         match self {
             Value::List(v) => !v.list.is_empty(),
             Value::Tuple(v) => !v.list.is_empty(),
