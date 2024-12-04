@@ -87,7 +87,11 @@ impl fmt::Display for HashTag {
 /// ```
 ///
 pub fn parse_hashtag<'a>() -> impl Parser<'a, &'a str, HashTag, extra::Err<Rich<'a, char>>> {
-    just("#").ignore_then(parse_identifier()).map(|s| s.into())
+    // hashtags are more forgiving than identifiers because we have the leading #
+    let body_pattern = r"[\p{XID_Continue}\p{Emoji}_]*";
+    just("#")
+        .ignore_then(regex(body_pattern))
+        .map(|s: &str| s.into())
 }
 
 /// Parses the constant idenfitiers for `true` and `false`.

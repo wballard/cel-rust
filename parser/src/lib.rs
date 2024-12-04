@@ -301,7 +301,8 @@ mod tests {
     }
 
     fn assert_parse_eq(input: &str, expected: Expression) {
-        assert_eq!(parse(input), expected);
+        let input = parse(input);
+        assert_eq!(input, expected);
     }
     #[rstest]
     #[case("a", Expression::Identifier("a".into()))]
@@ -393,6 +394,9 @@ mod tests {
     ]))]
     #[case("{1}", Set(vec![
         Atom(Number(dec!(1))),
+    ]))]
+    #[case("{#1}", Set(vec![
+        Atom(HashTag("1".into())),
     ]))]
     #[case("{1, 2, 3}", Set(vec![
         Atom(Number(dec!(1))),

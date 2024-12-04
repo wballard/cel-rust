@@ -772,26 +772,8 @@ mod tests {
     }
 
     #[test]
-    fn tag_set() {
-        let program = Program::compile("{# #1, #2, #3 #}").unwrap();
-        let context = Context::default();
-        let result = program.execute(&context);
-        assert_eq!(
-            result.unwrap(),
-            Value::Set(
-                vec![
-                    Value::HashTag("1".into()),
-                    Value::HashTag("2".into()),
-                    Value::HashTag("3".into())
-                ]
-                .into()
-            )
-        );
-    }
-
-    #[test]
     fn tag_set_expression() {
-        let program = Program::compile("{# #one, #two, 'thr' + 'ee' #}").unwrap();
+        let program = Program::compile("{ #one, #two, 'thr' + 'ee' }").unwrap();
         let context = Context::default();
         let result = program.execute(&context);
         assert_eq!(
