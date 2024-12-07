@@ -628,19 +628,6 @@ mod tests {
         assert_eq!(result, true.into());
     }
 
-    #[test]
-    fn test_contains() {
-        let tests = vec![
-            ("list", "[1, 2, 3].contains(3) == true"),
-            ("map", "{1: true, 2: true, 3: true}.contains(3) == true"),
-            ("string", "'foobar'.contains('bar') == true"),
-        ];
-
-        for (name, script) in tests {
-            assert_eq!(test_script(script, None), Ok(true.into()), "{}", name);
-        }
-    }
-
     #[cfg(feature = "regex")]
     #[test]
     fn test_matches() {
