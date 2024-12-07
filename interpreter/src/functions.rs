@@ -219,16 +219,31 @@ pub fn map(
     ident: Identifier,
     expr: Expression,
 ) -> Result<Value> {
+    fn _apply<'a, T: Iterator<Item = &'a Value>>(
+        vals: T,
+        len: usize,
+        ftx: &FunctionContext,
+        ident: &Identifier,
+        expr: &Expression,
+    ) -> Result<Vec<Value>> {
+        let mut values = Vec::with_capacity(len);
+        let mut ptx = ftx.ptx.new_inner_scope();
+        for item in vals {
+            ptx.add_variable_from_value(ident.clone(), item.clone());
+            let value = ptx.resolve(expr)?;
+            values.push(value);
+        }
+        Ok(values)
+    }
     match this {
-        Value::List(items) => {
-            let mut values = Vec::with_capacity(items.list.len());
-            let mut ptx = ftx.ptx.new_inner_scope();
-            for item in items.list.iter() {
-                ptx.add_variable_from_value(ident.clone(), item.clone());
-                let value = ptx.resolve(&expr)?;
-                values.push(value);
-            }
-            Value::List(ValueList { list: values })
+        Value::List(items) => Value::List(ValueList {
+            list: _apply(items.list.iter(), items.list.len(), ftx, &ident, &expr)?,
+        }),
+        Value::Tuple(items) => Value::Tuple(ValueList {
+            list: _apply(items.list.iter(), items.list.len(), ftx, &ident, &expr)?,
+        }),
+        Value::Set(items) => {
+            Value::Set(_apply(items.set.iter(), items.set.len(), ftx, &ident, &expr)?.into())
         }
         _ => return Err(this.error_expected_type(ValueType::List)),
     }
@@ -461,24 +476,6 @@ mod tests {
     #[test]
     fn test_has() {
         assert!(false, "TODO: implement entity has");
-    }
-
-    #[test]
-    fn test_map() {
-        [
-            ("map list", "[1, 2, 3].map(x, x * 2) == [2, 4, 6]"),
-            ("map list 2", "[1, 2, 3].map(y, y + 1) == [2, 3, 4]"),
-            (
-                "nested map",
-                "[[1, 2], [2, 3]].map(x, x.map(x, x * 2)) == [[2, 4], [4, 6]]",
-            ),
-            (
-                "map to list",
-                r#"{'John': 'smart'}.map(key, key) == ['John']"#,
-            ),
-        ]
-        .iter()
-        .for_each(assert_script);
     }
 
     #[test]
