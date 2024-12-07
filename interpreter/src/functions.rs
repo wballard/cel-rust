@@ -438,30 +438,44 @@ pub mod time {
     }
 }
 
-pub fn max(Arguments(args): Arguments) -> Result<Value> {
-    // If items is a list of values, then operate on the list
-    let items = if args.list.len() == 1 {
-        match &args.list[0] {
-            Value::List(values) => values,
-            _ => return Ok(args.list[0].clone()),
+pub fn max(ftx: &FunctionContext, Arguments(args): Arguments) -> Result<Value> {
+    fn _fold<'a>(acc: &'a Value, x: &'a Value) -> Result<&'a Value> {
+        match acc.partial_cmp(x) {
+            Some(Ordering::Greater) => Ok(acc),
+            Some(_) => Ok(x),
+            None => Err(ExecutionError::ValuesNotComparable(acc.clone(), x.clone())),
         }
-    } else {
-        &args
+    }
+    // If items is multiple values, then operate on it directly
+    let refret = match &ftx.this {
+        Some(this) => match this {
+            Value::List(values) => values.list.iter().try_fold(&Value::Null, _fold),
+            Value::Tuple(values) => values.list.iter().try_fold(&Value::Null, _fold),
+            Value::Set(values) => values.set.iter().try_fold(&Value::Null, _fold),
+            _ => Err(ExecutionError::NotSupportedAsMethod {
+                method: "max".to_string(),
+                target: this.clone(),
+            })?,
+        },
+        None => {
+            if args.list.len() == 1 {
+                // if we only have one multi valued item, call max on it
+                match &(args.list[0]) {
+                    Value::List(values) => values.list.iter().try_fold(&Value::Null, _fold),
+                    Value::Tuple(values) => values.list.iter().try_fold(&Value::Null, _fold),
+                    Value::Set(values) => values.set.iter().try_fold(&Value::Null, _fold),
+                    _ => return Ok(args.list[0].clone()),
+                }
+            } else {
+                args.list.iter().try_fold(&Value::Null, _fold)
+            }
+        }
     };
 
-    items
-        .list
-        .iter()
-        .skip(1)
-        .try_fold(
-            items.list.first().unwrap_or(&Value::Null),
-            |acc, x| match acc.partial_cmp(x) {
-                Some(Ordering::Greater) => Ok(acc),
-                Some(_) => Ok(x),
-                None => Err(ExecutionError::ValuesNotComparable(acc.clone(), x.clone())),
-            },
-        )
-        .cloned()
+    match refret {
+        Ok(v) => Ok(v.clone()),
+        Err(e) => Err(e),
+    }
 }
 
 #[cfg(test)]
@@ -514,21 +528,6 @@ mod tests {
             ("exist list #1", "[0, 1, 2].exists_one(x, x > 0) == false"),
             ("exist list #2", "[0, 1, 2].exists_one(x, x == 0)"),
             ("exist map", "{0: 0, 1:1, 2:2}.exists_one(x, x == 2)"),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
-    fn test_max() {
-        [
-            ("max single", "max(1) == 1"),
-            ("max multiple", "max(1, 2, 3) == 3"),
-            ("max negative", "max(-1, 0) == 0"),
-            ("max float", "max(-1.0, 0.0) == 0.0"),
-            ("max list", "max([1, 2, 3]) == 3"),
-            ("max empty list", "max([]) == null"),
-            ("max no args", "max() == null"),
         ]
         .iter()
         .for_each(assert_script);

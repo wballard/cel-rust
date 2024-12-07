@@ -39,6 +39,14 @@ impl From<Vec<Value>> for ValueSet {
     }
 }
 
+impl From<ValueSet> for ValueList {
+    fn from(set: ValueSet) -> Self {
+        ValueList {
+            list: set.set.into_iter().collect(),
+        }
+    }
+}
+
 /// Values that can be computed by the interpreter.
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -329,6 +337,8 @@ impl Ord for Value {
             (Value::Timestamp(a), Value::Timestamp(b)) => a.cmp(b),
             (Value::Ulid(a), Value::Ulid(b)) => a.cmp(b),
             (Value::HashTag(a), Value::HashTag(b)) => a.cmp(b),
+            // any value is greater than null -- this allows fold and reduce to work
+            (Value::Null, _) => Ordering::Less,
             _ => Ordering::Equal,
         }
     }
