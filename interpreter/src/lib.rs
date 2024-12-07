@@ -186,6 +186,7 @@ mod tests {
         let content = fs::read_to_string(path).expect("Unable to read file");
         // then there must be a script
         assert!(!content.is_empty());
+        // separate the input and the expected output
         let parts: Vec<&str> = content.split("---").collect();
         // with a script and an answer
         let script = parts[0];

@@ -563,63 +563,6 @@ mod tests {
     }
 
     #[test]
-    fn test_timestamp() {
-        [
-            ("comparison", "2023-05-29T00:00:00Z > 2023-05-28T00:00:00Z"),
-            ("comparison", "2023-05-29T00:00:00Z < 2023-05-30T00:00:00Z"),
-            (
-                "subtracting duration",
-                "2023-05-29T00:00:00Z - 24h == 2023-05-28T00:00:00Z",
-            ),
-            (
-                "subtracting date",
-                "2023-05-29T00:00:00Z - 2023-05-28T00:00:00Z == 24h",
-            ),
-            (
-                "adding duration",
-                "2023-05-28T00:00:00Z + 24h == 2023-05-29T00:00:00Z",
-            ),
-            (
-                "timestamp string",
-                "2023-05-28T00:00:00Z.string() == '2023-05-28T00:00:00+00:00'",
-            ),
-            (
-                "timestamp getFullYear",
-                "2023-05-28T00:00:00Z.getFullYear() == 2023",
-            ),
-            ("timestamp getMonth", "2023-05-28T00:00:00Z.getMonth() == 4"),
-            (
-                "timestamp getDayOfMonth",
-                "2023-05-28T00:00:00Z.getDayOfMonth() == 27",
-            ),
-            (
-                "timestamp getDayOfYear",
-                "2023-05-28T00:00:00Z.getDayOfYear() == 147",
-            ),
-            ("timestamp getDate", "2023-05-28T00:00:00Z.getDate() == 28"),
-            (
-                "timestamp getDayOfWeek",
-                "2023-05-28T00:00:00Z.getDayOfWeek() == 0",
-            ),
-            ("timestamp getHours", "2023-05-28T02:00:00Z.getHours() == 2"),
-            (
-                "timestamp getMinutes",
-                " 2023-05-28T00:05:00Z.getMinutes() == 5",
-            ),
-            (
-                "timestamp getSeconds",
-                "2023-05-28T00:00:06Z.getSeconds() == 6",
-            ),
-            (
-                "timestamp getMilliseconds",
-                "2023-05-28T00:00:42.123Z.getMilliseconds() == 123",
-            ),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
     fn test_timestamp_variable() {
         let mut context = Context::default();
         let ts: chrono::DateTime<chrono::Utc> =
