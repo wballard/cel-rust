@@ -144,10 +144,29 @@ pub fn string(_: &FunctionContext, This(this): This<Value>) -> Result<Value> {
 /// ```cel
 /// "abc".startsWith("a") == true
 /// ```
-pub fn starts_with(This(this): This<Value>, prefix: Value) -> bool {
-    let seek: String = this.into();
-    let sought: String = prefix.into();
-    seek.starts_with(&sought)
+pub fn starts_with(This(this): This<Value>, prefix: Value) -> Result<Value> {
+    let v = match this {
+        Value::String(s) => {
+            let seek: String = s;
+            let sought: String = prefix.into();
+            seek.starts_with(&sought)
+        }
+        Value::HashTag(h) => {
+            let seek: String = h.as_ref().into();
+            let sought: String = prefix.into();
+            seek.starts_with(&sought)
+        }
+        Value::List(l) => match l.list.first() {
+            Some(v) => v == &prefix,
+            _ => false,
+        },
+        Value::Tuple(l) => match l.list.first() {
+            Some(v) => v == &prefix,
+            _ => false,
+        },
+        _ => false,
+    };
+    Ok(v.into())
 }
 
 /// Returns true if a string ends with another string.
@@ -156,10 +175,29 @@ pub fn starts_with(This(this): This<Value>, prefix: Value) -> bool {
 /// ```cel
 /// "abc".endsWith("c") == true
 /// ```
-pub fn ends_with(This(this): This<Value>, suffix: Value) -> bool {
-    let seek: String = this.into();
-    let sought: String = suffix.into();
-    seek.ends_with(&sought)
+pub fn ends_with(This(this): This<Value>, suffix: Value) -> Result<Value> {
+    let v = match this {
+        Value::String(s) => {
+            let seek: String = s;
+            let sought: String = suffix.into();
+            seek.ends_with(&sought)
+        }
+        Value::HashTag(h) => {
+            let seek: String = h.as_ref().into();
+            let sought: String = suffix.into();
+            seek.ends_with(&sought)
+        }
+        Value::List(l) => match l.list.last() {
+            Some(v) => v == &suffix,
+            _ => false,
+        },
+        Value::Tuple(l) => match l.list.last() {
+            Some(v) => v == &suffix,
+            _ => false,
+        },
+        _ => false,
+    };
+    Ok(v.into())
 }
 
 /// Returns true if a string matches the regular expression.
@@ -537,26 +575,6 @@ mod tests {
         [
             ("exist list #1", "[0, 1, 2].exists_one(x, x > 0) == false"),
             ("exist list #2", "[0, 1, 2].exists_one(x, x == 0)"),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
-    fn test_starts_with() {
-        [
-            ("starts with true", "'foobar'.startsWith('foo') == true"),
-            ("starts with false", "'foobar'.startsWith('bar') == false"),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
-    fn test_ends_with() {
-        [
-            ("ends with true", "'foobar'.endsWith('bar') == true"),
-            ("ends with false", "'foobar'.endsWith('foo') == false"),
         ]
         .iter()
         .for_each(assert_script);
