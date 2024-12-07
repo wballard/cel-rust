@@ -20,6 +20,17 @@ pub enum Expression {
     Empty,
 }
 
+impl Expression {
+    /// Used in function calls to get at the arguments.
+    pub fn to_arguments(&self) -> Vec<&Expression> {
+        match self {
+            Expression::Tuple(e) => e.iter().collect(),
+            Expression::Atom(_) => vec![self],
+            _ => vec![],
+        }
+    }
+}
+
 /// Represents a member access in an expression.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Member {

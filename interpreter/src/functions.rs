@@ -18,7 +18,7 @@ pub struct FunctionContext<'context> {
     pub name: Identifier,
     pub this: Option<Value>,
     pub ptx: &'context Context<'context>,
-    pub args: Vec<Expression>,
+    pub args: Vec<&'context Expression>,
     pub arg_idx: usize,
 }
 
@@ -27,7 +27,7 @@ impl<'context> FunctionContext<'context> {
         name: Identifier,
         this: Option<Value>,
         ptx: &'context Context<'context>,
-        args: Vec<Expression>,
+        args: Vec<&'context Expression>,
     ) -> Self {
         Self {
             name,

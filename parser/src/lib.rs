@@ -313,10 +313,13 @@ mod tests {
 
     #[rstest]
     #[case("1", Atom(Number(dec!(1))))]
+    #[case("-1", Atom(Number(dec!(-1))))]
     #[case("1.0", Atom(Number(dec!(1.0))))]
+    #[case("-1.0", Atom(Number(dec!(-1.0))))]
     #[case("1e3", Expression::Atom(Number(dec!(1000.0))))]
     #[case("1e-3", Expression::Atom(Number(dec!(0.001))))]
     #[case("1.4e-3", Expression::Atom(Number(dec!(0.0014))))]
+    #[case("-1.4e-3", Expression::Atom(Number(dec!(-0.0014))))]
     fn numbers(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }

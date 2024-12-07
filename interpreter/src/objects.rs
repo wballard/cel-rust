@@ -442,7 +442,7 @@ impl<'a> Value {
                     Identifier(op.to_string()),
                     None,
                     ctx,
-                    vec![*right.clone()],
+                    right.to_arguments(),
                 );
                 func.call_with_context(&mut ctx)
             }
@@ -450,12 +450,9 @@ impl<'a> Value {
                 let func = ctx
                     .get_operator(op)
                     .ok_or_else(|| ExecutionError::UndefinedOperator(op.clone()))?;
-                let mut ctx = FunctionContext::new(
-                    Identifier(op.to_string()),
-                    None,
-                    ctx,
-                    vec![*left.clone(), *right.clone()],
-                );
+                let arguments = vec![&**left, &**right];
+                let mut ctx =
+                    FunctionContext::new(Identifier(op.to_string()), None, ctx, arguments);
                 func.call_with_context(&mut ctx)
             }
             /*
@@ -561,18 +558,33 @@ impl<'a> Value {
             }
             Expression::Identifier(name) => ctx.get_variable(name),
             Expression::FunctionCall(function, arguments) => {
+                /*
                 let arguments = match &**arguments {
                     Expression::Tuple(args) => args,
+                    Expression::Atom(arg) => {
+                        let arg = arg.clone();
+                        vec![Expression::Atom(arg)].as_ref()
+                    }
                     _ => unimplemented!(),
                 };
+                */
 
                 match &**function {
+                    // this looks a little weird, but it's because we need to handle
+                    // 1-1 where there is no space and the tokens are 1 and -1 with no operator
+                    Expression::Atom(Atom::Number(lhs)) => match &**arguments {
+                        Expression::Atom(Atom::Number(rhs)) => Ok(Value::Number(lhs + rhs)),
+                        expr => {
+                            let target = Value::resolve(expr, ctx)?;
+                            target.error_expected_type(ValueType::Number).into()
+                        }
+                    },
                     Expression::Identifier(name) => {
                         let func = ctx
                             .get_function(name)
                             .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone()))?;
                         let mut ctx =
-                            FunctionContext::new(name.clone(), None, ctx, arguments.clone());
+                            FunctionContext::new(name.clone(), None, ctx, arguments.to_arguments());
                         func.call_with_context(&mut ctx)
                     }
                     Expression::Binary(
@@ -589,7 +601,7 @@ impl<'a> Value {
                                 name.clone(),
                                 Some(target),
                                 ctx,
-                                arguments.clone(),
+                                arguments.to_arguments(),
                             );
                             func.call_with_context(&mut ctx)
                         }
@@ -680,11 +692,9 @@ impl<'a> Value {
             Value::String(v) => !v.is_empty(),
             Value::Bool(v) => *v,
             Value::Null => false,
-
             Value::Duration(v) => v.num_nanoseconds().map(|n| n != 0).unwrap_or(false),
-
             Value::Timestamp(v) => v.timestamp_nanos_opt().unwrap_or_default() > 0,
-            Value::Function(_, _) => false,
+            Value::Function(_, _) => true,
             Value::Ulid(_) => true,
             Value::HashTag(_) => true,
         }

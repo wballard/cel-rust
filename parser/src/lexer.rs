@@ -90,11 +90,11 @@ pub fn lexer<'a>() -> impl Parser<'a, &'a str, Vec<Spanned<Token>>, extra::Err<R
                 .as_context()
                 .map(Token::Braces),
             // the basic atoms
+            parse_atom().boxed().map(Token::Atom),
             just(',').map(|_| Token::Separator),
             just('?').map(|_| Token::Question),
             just(':').map(|_| Token::Colon),
             parse_op().boxed().map(Token::Operator),
-            parse_atom().boxed().map(Token::Atom),
             parse_identifier().boxed().map(Token::Identifier),
         ))
         .map_with(|token, e| (token, e.span()))
