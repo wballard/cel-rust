@@ -1,5 +1,6 @@
 use std::ops;
 
+use cel_parser::identifiers::HashTag;
 use cel_parser::{ArithmeticOp, Operator};
 
 use crate::{ExecutionError, FunctionContext, ResolveResult, Value};
@@ -26,6 +27,8 @@ impl ops::Add<Value> for Value {
                     .into(),
             )
             .into(),
+
+            // additions that turn into strings
             (Value::String(l), Value::String(r)) => {
                 let mut new = String::with_capacity(l.len() + r.len());
                 new.push_str(&l);
@@ -43,6 +46,20 @@ impl ops::Add<Value> for Value {
                 new.push_str(&l.to_string());
                 new.push_str(&r);
                 Value::String(new).into()
+            }
+
+            // adding on to hashtags
+            (Value::HashTag(l), Value::HashTag(r)) => {
+                let mut new = String::with_capacity(l.len() + r.len() + 1);
+                new.push_str(l.as_ref());
+                new.push_str(r.as_ref());
+                Value::HashTag(HashTag::new(new)).into()
+            }
+            (Value::HashTag(l), Value::String(r)) => {
+                let mut new = String::with_capacity(l.len() + r.len() + 1);
+                new.push_str(l.as_ref());
+                new.push_str(r.as_ref());
+                Value::HashTag(HashTag::new(new)).into()
             }
 
             (Value::Duration(l), Value::Duration(r)) => Value::Duration(l + r).into(),

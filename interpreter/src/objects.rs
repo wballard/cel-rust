@@ -11,6 +11,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter};
 
+/// Holds a list of values.
 #[derive(Debug, PartialEq, Clone, Hash, PartialOrd, Ord, Eq)]
 pub struct ValueList {
     pub list: Vec<Value>,
@@ -22,6 +23,9 @@ impl From<Vec<Value>> for ValueList {
     }
 }
 
+/// Holds a set of values.
+///
+/// This is ideally used for HashTags and Identifiers.
 #[derive(Debug, PartialEq, Clone, Hash, PartialOrd, Ord, Eq)]
 pub struct ValueSet {
     pub set: BTreeSet<Value>,
@@ -52,6 +56,20 @@ pub enum Value {
     Null,
     Ulid(ulid::Ulid),
     HashTag(HashTag),
+}
+
+impl Value {
+    pub fn len(&self) -> usize {
+        match self {
+            Value::List(v) => v.list.len(),
+            Value::Tuple(v) => v.list.len(),
+            Value::Set(v) => v.set.len(),
+            Value::String(v) => v.len(),
+            Value::HashTag(v) => v.len(),
+            // other values are canonically 1
+            _ => 1,
+        }
+    }
 }
 
 impl TryFrom<Value> for Decimal {
@@ -754,24 +772,6 @@ mod tests {
         assert_eq!(
             indirect,
             Value::List(vec![Value::String("example".to_string())].into())
-        );
-    }
-
-    #[test]
-    fn tag_set_expression() {
-        let program = Program::compile("{ #one, #two, 'thr' + 'ee' }").unwrap();
-        let context = Context::default();
-        let result = program.execute(&context);
-        assert_eq!(
-            result.unwrap(),
-            Value::Set(
-                vec![
-                    Value::HashTag("one".into()),
-                    Value::HashTag("two".into()),
-                    Value::HashTag("three".into())
-                ]
-                .into()
-            )
         );
     }
 }

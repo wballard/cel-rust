@@ -37,6 +37,18 @@ pub fn parse_ulid<'a>() -> impl Parser<'a, &'a str, Ulid, extra::Err<Rich<'a, ch
 #[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Clone)]
 pub struct HashTag(String);
 
+impl HashTag {
+    pub fn new<S: Into<String>>(s: S) -> Self {
+        HashTag(s.into())
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 impl AsRef<str> for HashTag {
     fn as_ref(&self) -> &str {
         &self.0
@@ -50,6 +62,12 @@ impl From<&str> for HashTag {
         } else {
             HashTag(s.to_string())
         }
+    }
+}
+
+impl From<HashTag> for String {
+    fn from(id: HashTag) -> Self {
+        id.0.clone()
     }
 }
 
