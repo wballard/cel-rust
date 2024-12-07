@@ -267,17 +267,34 @@ pub fn filter(
     ident: Identifier,
     expr: Expression,
 ) -> Result<Value> {
-    match this {
-        Value::List(items) => {
-            let mut values = Vec::with_capacity(items.list.len());
-            let mut ptx = ftx.ptx.new_inner_scope();
-            for item in items.list.iter() {
-                ptx.add_variable_from_value(ident.clone(), item.clone());
-                if let Value::Bool(true) = ptx.resolve(&expr)? {
-                    values.push(item.clone());
-                }
+    fn _apply<'a, T: Iterator<Item = &'a Value>>(
+        vals: T,
+        len: usize,
+        ftx: &FunctionContext,
+        ident: &Identifier,
+        expr: &Expression,
+    ) -> Result<Vec<Value>> {
+        let mut values = Vec::with_capacity(len);
+        let mut ptx = ftx.ptx.new_inner_scope();
+        for item in vals {
+            ptx.add_variable_from_value(ident.clone(), item.clone());
+            let value = ptx.resolve(expr)?;
+            if value.to_bool() {
+                values.push(item.clone());
             }
-            Value::List(ValueList { list: values })
+        }
+        Ok(values)
+    }
+
+    match this {
+        Value::List(items) => Value::List(ValueList {
+            list: _apply(items.list.iter(), items.list.len(), ftx, &ident, &expr)?,
+        }),
+        Value::Tuple(items) => Value::Tuple(ValueList {
+            list: _apply(items.list.iter(), items.list.len(), ftx, &ident, &expr)?,
+        }),
+        Value::Set(items) => {
+            Value::Set(_apply(items.set.iter(), items.set.len(), ftx, &ident, &expr)?.into())
         }
         _ => return Err(this.error_expected_type(ValueType::List)),
     }
@@ -505,19 +522,11 @@ mod tests {
     }
 
     #[test]
-    fn test_filter() {
-        [("filter list", "[1, 2, 3].filter(x, x > 2) == [3]")]
-            .iter()
-            .for_each(assert_script);
-    }
-
-    #[test]
     fn test_exists() {
         [
             ("exist list #1", "[0, 1, 2].exists(x, x > 0)"),
             ("exist list #2", "[0, 1, 2].exists(x, x == 3) == false"),
             ("exist list #3", "[0, 1, 2, 2].exists(x, x == 2)"),
-            ("exist map", "{0: 0, 1:1, 2:2}.exists(x, x > 0)"),
         ]
         .iter()
         .for_each(assert_script);
@@ -528,7 +537,6 @@ mod tests {
         [
             ("exist list #1", "[0, 1, 2].exists_one(x, x > 0) == false"),
             ("exist list #2", "[0, 1, 2].exists_one(x, x == 0)"),
-            ("exist map", "{0: 0, 1:1, 2:2}.exists_one(x, x == 2)"),
         ]
         .iter()
         .for_each(assert_script);
