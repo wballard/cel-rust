@@ -70,6 +70,17 @@ impl Value {
             _ => 1,
         }
     }
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Value::List(v) => v.list.is_empty(),
+            Value::Tuple(v) => v.list.is_empty(),
+            Value::Set(v) => v.set.is_empty(),
+            Value::String(v) => v.is_empty(),
+            Value::HashTag(v) => v.is_empty(),
+            // other values are canonically not empty
+            _ => false,
+        }
+    }
 }
 
 impl TryFrom<Value> for Decimal {
@@ -375,7 +386,7 @@ impl From<Value> for String {
             Value::Bool(v) => format!("{}", v),
             Value::Number(v) => format!("{}", v),
             Value::Null => "".to_string(),
-            Value::Duration(v) => format!("{}", v),
+            Value::Duration(v) => format!("{}s", v.num_seconds()),
             Value::Timestamp(v) => v.to_rfc3339(),
             Value::Ulid(v) => format!("&{}", v),
             Value::List(v) => delimit(v.list.iter(), '[', ']'),

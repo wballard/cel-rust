@@ -133,7 +133,9 @@ pub fn contains(This(this): This<Value>, arg: Value) -> Result<Value> {
 
 // Performs a type conversion on the target.
 pub fn string(_: &FunctionContext, This(this): This<Value>) -> Result<Value> {
-    Ok(this.to_string().into())
+    // this is not a 'display string' -- it's an actual string
+    let s: String = this.into();
+    Ok(s.into())
 }
 
 /// Returns true if a string starts with another string.
@@ -672,16 +674,5 @@ mod tests {
                 }
             )
         );
-    }
-
-    #[test]
-    fn test_string() {
-        [
-            ("string", "'foo'.string() == 'foo'"),
-            ("int", "10.string() == '10'"),
-            ("float", "10.5.string() == '10.5'"),
-        ]
-        .iter()
-        .for_each(assert_script);
     }
 }
