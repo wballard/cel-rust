@@ -186,26 +186,36 @@ impl<'a> Default for Context<'a> {
         ctx.add_function("all", functions::all);
         ctx.add_function("max", functions::max);
         ctx.add_function("startsWith", functions::starts_with);
+        ctx.add_function("starts_with", functions::starts_with);
         ctx.add_function("endsWith", functions::ends_with);
+        ctx.add_function("ends_with", functions::ends_with);
         ctx.add_function("string", functions::string);
         ctx.add_function("to_string", functions::string);
+        ctx.add_function("toString", functions::string);
         ctx.add_function("exists", functions::exists);
-        ctx.add_function("exists_one", functions::exists_one);
 
         ctx.add_function("matches", functions::matches);
 
-        {
-            ctx.add_function("getFullYear", functions::time::timestamp_year);
-            ctx.add_function("getMonth", functions::time::timestamp_month);
-            ctx.add_function("getDayOfYear", functions::time::timestamp_year_day);
-            ctx.add_function("getDayOfMonth", functions::time::timestamp_month_day);
-            ctx.add_function("getDate", functions::time::timestamp_date);
-            ctx.add_function("getDayOfWeek", functions::time::timestamp_weekday);
-            ctx.add_function("getHours", functions::time::timestamp_hours);
-            ctx.add_function("getMinutes", functions::time::timestamp_minutes);
-            ctx.add_function("getSeconds", functions::time::timestamp_seconds);
-            ctx.add_function("getMilliseconds", functions::time::timestamp_millis);
-        }
+        ctx.add_function("getFullYear", functions::time::timestamp_year);
+        ctx.add_function("full_year", functions::time::timestamp_year);
+        ctx.add_function("getMonth", functions::time::timestamp_month);
+        ctx.add_function("monty", functions::time::timestamp_month);
+        ctx.add_function("getDayOfYear", functions::time::timestamp_year_day);
+        ctx.add_function("day_of_year", functions::time::timestamp_year_day);
+        ctx.add_function("getDayOfMonth", functions::time::timestamp_month_day);
+        ctx.add_function("day_of_month", functions::time::timestamp_month_day);
+        ctx.add_function("getDate", functions::time::timestamp_date);
+        ctx.add_function("date", functions::time::timestamp_date);
+        ctx.add_function("getDayOfWeek", functions::time::timestamp_weekday);
+        ctx.add_function("day_of_week", functions::time::timestamp_weekday);
+        ctx.add_function("getHours", functions::time::timestamp_hours);
+        ctx.add_function("hours", functions::time::timestamp_hours);
+        ctx.add_function("getMinutes", functions::time::timestamp_minutes);
+        ctx.add_function("minutes", functions::time::timestamp_minutes);
+        ctx.add_function("getSeconds", functions::time::timestamp_seconds);
+        ctx.add_function("seconds", functions::time::timestamp_seconds);
+        ctx.add_function("getMilliseconds", functions::time::timestamp_millis);
+        ctx.add_function("milliseconds", functions::time::timestamp_millis);
 
         ctx
     }

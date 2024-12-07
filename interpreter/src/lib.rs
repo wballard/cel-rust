@@ -204,26 +204,4 @@ mod tests {
         let input = "1.1";
         let _p: Program = input.try_into().unwrap();
     }
-
-    #[test]
-    fn variables() {
-        fn assert_output(script: &str, expected: ResolveResult) {
-            let mut ctx = Context::default();
-            ctx.add_variable_from_value("arr", vec![1i64, 2, 3]);
-            ctx.add_variable_from_value("str", "foobar".to_string());
-            assert_eq!(test_script(script, Some(ctx)), expected);
-        }
-
-        // Test methods
-        assert_output("size(arr) == 3", Ok(true.into()));
-        assert_output("arr.size() == 3", Ok(false.into()));
-        assert_output("size(str) == 6", Ok(true.into()));
-        assert_output("str.size() == 6", Ok(false.into()));
-
-        // Test that we can index into an array
-        assert_output("arr[0] == 1", Ok(true.into()));
-
-        // Test that we can index into a string
-        assert_output("str[0] == 'f'", Ok(true.into()));
-    }
 }

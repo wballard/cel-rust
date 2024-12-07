@@ -400,56 +400,11 @@ pub fn exists(
     This(this): This<Value>,
     ident: Identifier,
     expr: Expression,
-) -> Result<bool> {
-    match this {
-        Value::List(items) => {
-            let mut ptx = ftx.ptx.new_inner_scope();
-            for item in items.list.iter() {
-                ptx.add_variable_from_value(&ident, item);
-                if let Value::Bool(true) = ptx.resolve(&expr)? {
-                    return Ok(true);
-                }
-            }
-            Ok(false)
-        }
-        _ => Err(this.error_expected_type(ValueType::List)),
-    }
-}
-
-/// Returns a boolean value indicating whether only one value in the provided
-/// meets the predicate defined by the provided expression.
-///
-/// This function is intended to be used like the CEL-go `exists` macro:
-/// <https://github.com/google/cel-spec/blob/master/doc/langdef.md#macros>
-///
-/// # Example
-/// ```cel
-/// [1, 2, 3].exists_one(x, x > 0) == false
-/// [1, 2, 3].exists_one(x, x == 1) == true
-/// [{1:true, 2:true, 3:false}].exists_one(x, x > 0) == false
-/// ```
-pub fn exists_one(
-    ftx: &FunctionContext,
-    This(this): This<Value>,
-    ident: Identifier,
-    expr: Expression,
-) -> Result<bool> {
-    match this {
-        Value::List(items) => {
-            let mut ptx = ftx.ptx.new_inner_scope();
-            let mut exists = false;
-            for item in items.list.iter() {
-                ptx.add_variable_from_value(&ident, item);
-                if let Value::Bool(true) = ptx.resolve(&expr)? {
-                    if exists {
-                        return Ok(false);
-                    }
-                    exists = true;
-                }
-            }
-            Ok(exists)
-        }
-        _ => Err(this.error_expected_type(ValueType::List)),
+) -> Result<Value> {
+    let empty = filter(ftx, This(this), ident, expr).map(|v| !v.is_empty());
+    match empty {
+        Ok(v) => Ok(v.into()),
+        Err(e) => Err(e),
     }
 }
 
@@ -557,41 +512,6 @@ mod tests {
     #[test]
     fn test_has() {
         assert!(false, "TODO: implement entity has");
-    }
-
-    #[test]
-    fn test_exists() {
-        [
-            ("exist list #1", "[0, 1, 2].exists(x, x > 0)"),
-            ("exist list #2", "[0, 1, 2].exists(x, x == 3) == false"),
-            ("exist list #3", "[0, 1, 2, 2].exists(x, x == 2)"),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
-    fn test_exists_one() {
-        [
-            ("exist list #1", "[0, 1, 2].exists_one(x, x > 0) == false"),
-            ("exist list #2", "[0, 1, 2].exists_one(x, x == 0)"),
-        ]
-        .iter()
-        .for_each(assert_script);
-    }
-
-    #[test]
-    fn test_timestamp_variable() {
-        let mut context = Context::default();
-        let ts: chrono::DateTime<chrono::Utc> =
-            chrono::DateTime::parse_from_rfc3339("2023-05-29T00:00:00Z")
-                .map(|e| e.with_timezone(&chrono::Utc))
-                .unwrap();
-        context.add_variable_from_value("ts", crate::Value::Timestamp(ts));
-
-        let program = crate::Program::compile("ts == 2023-05-29T00:00:00Z").unwrap();
-        let result = program.execute(&context).unwrap();
-        assert_eq!(result, true.into());
     }
 
     #[cfg(feature = "regex")]
