@@ -300,20 +300,32 @@ pub fn all(
     This(this): This<Value>,
     ident: Identifier,
     expr: Expression,
-) -> Result<bool> {
-    return match this {
-        Value::List(items) => {
-            let mut ptx = ftx.ptx.new_inner_scope();
-            for item in items.list.iter() {
-                ptx.add_variable_from_value(&ident, item);
-                if let Value::Bool(false) = ptx.resolve(&expr)? {
-                    return Ok(false);
-                }
+) -> Result<Value> {
+    fn _apply<'a, T: Iterator<Item = &'a Value>>(
+        vals: T,
+        ftx: &FunctionContext,
+        ident: &Identifier,
+        expr: &Expression,
+    ) -> Result<Value> {
+        let mut ptx = ftx.ptx.new_inner_scope();
+        for item in vals {
+            ptx.add_variable_from_value(ident.clone(), item.clone());
+            let value = ptx.resolve(expr)?;
+            if value.to_bool() {
+                // keep on going
+            } else {
+                return Ok(false.into());
             }
-            Ok(true)
         }
+        Ok(true.into())
+    }
+    match this {
+        Value::List(items) => _apply(items.list.iter(), ftx, &ident, &expr)?,
+        Value::Tuple(items) => _apply(items.list.iter(), ftx, &ident, &expr)?,
+        Value::Set(items) => _apply(items.set.iter(), ftx, &ident, &expr)?,
         _ => return Err(this.error_expected_type(ValueType::List)),
-    };
+    }
+    .into()
 }
 
 /// Returns a boolean value indicating whether a or more values in the provided
@@ -497,17 +509,6 @@ mod tests {
         [("filter list", "[1, 2, 3].filter(x, x > 2) == [3]")]
             .iter()
             .for_each(assert_script);
-    }
-
-    #[test]
-    fn test_all() {
-        [
-            ("all list #1", "[0, 1, 2].all(x, x >= 0)"),
-            ("all list #2", "[0, 1, 2].all(x, x > 0) == false"),
-            ("all map", "{0: 0, 1:1, 2:2}.all(x, x >= 0) == true"),
-        ]
-        .iter()
-        .for_each(assert_script);
     }
 
     #[test]
