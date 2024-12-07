@@ -35,14 +35,6 @@ impl From<Vec<Value>> for ValueSet {
     }
 }
 
-impl From<Vec<HashTag>> for ValueSet {
-    fn from(list: Vec<HashTag>) -> Self {
-        ValueSet {
-            set: list.into_iter().map(Value::HashTag).collect(),
-        }
-    }
-}
-
 /// Values that can be computed by the interpreter.
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -522,16 +514,10 @@ impl<'a> Value {
                 Value::Tuple(list.into()).into()
             }
             Expression::Set(items) => {
-                // reduce the expressions to a list of tag values
-                let list: Vec<_> = items
+                let list = items
                     .iter()
-                    .flat_map(|i| Value::resolve(i, ctx))
-                    .filter_map(|v| match v {
-                        Value::HashTag(v) => Some(v),
-                        Value::String(v) => Some(v.as_str().into()),
-                        _ => None,
-                    })
-                    .collect();
+                    .map(|i| Value::resolve(i, ctx))
+                    .collect::<Result<Vec<_>, _>>()?;
                 Value::Set(list.into()).into()
             }
             Expression::Identifier(name) => ctx.get_variable(name),

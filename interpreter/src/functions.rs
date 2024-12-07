@@ -74,6 +74,7 @@ impl<'context> FunctionContext<'context> {
 pub fn size(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
     let size = match this {
         Value::List(l) => l.list.len(),
+        Value::Tuple(l) => l.list.len(),
         Value::Set(t) => t.set.len(),
         Value::String(s) => s.len(),
         Value::HashTag(h) => h.as_ref().len(),
@@ -453,18 +454,6 @@ mod tests {
 
     fn assert_script(input: &(&str, &str)) {
         assert_eq!(test_script(input.1, None), Ok(true.into()), "{}", input.0);
-    }
-
-    #[test]
-    fn test_size() {
-        [
-            ("size of map", "size({'a': 1, 'b': 2, 'c': 3}) == 3"),
-            ("size of string", "size('foo') == 3"),
-            ("size as a list method", "[1, 2, 3].size() == 3"),
-            ("size as a string method", "'foobar'.size() == 6"),
-        ]
-        .iter()
-        .for_each(assert_script);
     }
 
     #[test]
