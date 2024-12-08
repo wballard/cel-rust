@@ -32,10 +32,9 @@ impl Expression {
     }
 }
 
-/// A collection of all the references that an expression makes to variables and functions.
+/// A collection of all the references that an expression makes to variables.
 pub struct ExpressionReferences<'expr> {
     variables: HashSet<&'expr Identifier>,
-    functions: HashSet<&'expr Identifier>,
 }
 
 impl<'expr> ExpressionReferences<'expr> {
@@ -80,54 +79,46 @@ impl Expression {
     /// ```
     pub fn references(&self) -> ExpressionReferences {
         let mut variables = HashSet::new();
-        let mut functions = HashSet::new();
-        self._references(&mut variables, &mut functions);
-        ExpressionReferences {
-            variables,
-            functions,
-        }
+        self._references(&mut variables);
+        ExpressionReferences { variables }
     }
 
     /// Internal recursive function to collect all variable and function references in the expression.
-    fn _references<'expr>(
-        &'expr self,
-        variables: &mut HashSet<&'expr Identifier>,
-        functions: &mut HashSet<&'expr Identifier>,
-    ) {
+    fn _references<'expr>(&'expr self, variables: &mut HashSet<&'expr Identifier>) {
         match self {
             Expression::Unary(_, e) => {
-                e._references(variables, functions);
+                e._references(variables);
             }
             Expression::Binary(e1, _, e2) => {
-                e1._references(variables, functions);
-                e2._references(variables, functions);
+                e1._references(variables);
+                e2._references(variables);
             }
             Expression::Ternary(e1, e2, e3) => {
-                e1._references(variables, functions);
-                e2._references(variables, functions);
-                e3._references(variables, functions);
+                e1._references(variables);
+                e2._references(variables);
+                e3._references(variables);
             }
             Expression::FunctionCall(left, right) => {
-                left._references(variables, functions);
-                right._references(variables, functions);
+                left._references(variables);
+                right._references(variables);
             }
             Expression::Indexer(left, right) => {
-                left._references(variables, functions);
-                right._references(variables, functions);
+                left._references(variables);
+                right._references(variables);
             }
             Expression::List(e) => {
                 for e in e {
-                    e._references(variables, functions);
+                    e._references(variables);
                 }
             }
             Expression::Set(e) => {
                 for e in e {
-                    e._references(variables, functions);
+                    e._references(variables);
                 }
             }
             Expression::Tuple(e) => {
                 for e in e {
-                    e._references(variables, functions);
+                    e._references(variables);
                 }
             }
             Expression::Atom(_) => {}
@@ -137,7 +128,7 @@ impl Expression {
             Expression::Empty => {}
             Expression::Multiple(e) => {
                 for e in e {
-                    e._references(variables, functions);
+                    e._references(variables);
                 }
             }
         }
