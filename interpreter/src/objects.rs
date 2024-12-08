@@ -99,18 +99,18 @@ impl TryFrom<Value> for Decimal {
             Value::Number(v) => Ok(v),
             Value::String(v) => v.parse().map_err(|_| ExecutionError::UnexpectedType {
                 got: v,
-                want: "number".to_string(),
+                want: ValueType::Number.to_string(),
             }),
             _ => Err(ExecutionError::UnexpectedType {
                 got: value.type_of().to_string(),
-                want: "number".to_string(),
+                want: ValueType::Number.to_string(),
             }),
         }
     }
 }
 
 /// Reverse type mapping to allow type inspection.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ValueType {
     List,
     Tuple,
@@ -502,19 +502,6 @@ impl<'a> Value {
                     Value::resolve(right, ctx)
                 }
             }
-            Expression::Or(left, right) => {
-                let left = Value::resolve(left, ctx)?;
-                if left.to_bool() {
-                    left.into()
-                } else {
-                    Value::resolve(right, ctx)
-                }
-            }
-            Expression::And(left, right) => {
-                let left = Value::resolve(left, ctx)?;
-                let right = Value::resolve(right, ctx)?;
-                Value::Bool(left.to_bool() && right.to_bool()).into()
-            }
             Expression::Unary(op, expr) => {
                 let expr = Value::resolve(expr, ctx)?;
                 match op {
@@ -558,17 +545,6 @@ impl<'a> Value {
             }
             Expression::Identifier(name) => ctx.get_variable(name),
             Expression::FunctionCall(function, arguments) => {
-                /*
-                let arguments = match &**arguments {
-                    Expression::Tuple(args) => args,
-                    Expression::Atom(arg) => {
-                        let arg = arg.clone();
-                        vec![Expression::Atom(arg)].as_ref()
-                    }
-                    _ => unimplemented!(),
-                };
-                */
-
                 match &**function {
                     // this looks a little weird, but it's because we need to handle
                     // 1-1 where there is no space and the tokens are 1 and -1 with no operator
@@ -609,76 +585,73 @@ impl<'a> Value {
                     },
                     _ => unimplemented!(),
                 }
-                /*
-                let func = ctx
-                    .get_function(name)
-                    .ok_or_else(|| ExecutionError::UndeclaredReference(name.clone()))?;
-                match target {
-                    None => {
-                        let mut ctx = FunctionContext::new(name.clone(), None, ctx, args.clone());
-                        func.call_with_context(&mut ctx)
+            }
+            Expression::Indexer(target, indexes) => {
+                let target = Value::resolve(target, ctx)?;
+                let indexes = Value::resolve(indexes, ctx)?;
+                match &indexes {
+                    Value::List(list) => {
+                        // coming back with a single value if there is only one index
+                        match list.list.len() {
+                            0 => match target {
+                                Value::List(_) => Ok(Value::List(vec![].into())),
+                                Value::Tuple(_) => Ok(Value::Tuple(vec![].into())),
+                                Value::String(_) => Ok(Value::String("".to_string())),
+                                _ => Err(ExecutionError::UnsupportedIndex(
+                                    target.clone(),
+                                    indexes.clone(),
+                                )),
+                            },
+                            1 => target.member_by_indexer(list.list.first().unwrap(), ctx),
+                            _ => {
+                                let mut res = Vec::with_capacity(list.list.len());
+                                for idx in list.list.iter() {
+                                    res.push(target.member_by_indexer(idx, ctx)?);
+                                }
+                                Ok(Value::List(res.into()))
+                            }
+                        }
                     }
-                    Some(target) => {
-                        let mut ctx = FunctionContext::new(
-                            name.clone(),
-                            Some(Value::resolve(target, ctx)?),
-                            ctx,
-                            args.clone(),
-                        );
-                        func.call_with_context(&mut ctx)
-                    }
+                    _ => Err(ExecutionError::UnsupportedKeyType(ValueType::List)),
                 }
-                */
             }
             _ => unimplemented!(),
         }
     }
 
-    // >> a(b)
-    // Member(Ident("a"),
-    //        FunctionCall([Ident("b")]))
-    // >> a.b(c)
-    // Member(Member(Ident("a"),
-    //               Attribute("b")),
-    //        FunctionCall([Ident("c")]))
-
-    fn member(self, member: &Member, ctx: &Context) -> ResolveResult {
-        match member {
-            Member::Index(idx) => {
-                let idx = Value::resolve(idx, ctx)?;
-                match (self, idx) {
-                    (Value::List(items), Value::Number(idx)) => items
-                        .list
-                        .get(idx.to_usize().unwrap())
-                        .cloned()
-                        .unwrap_or(Value::Null)
-                        .into(),
-                    (Value::String(str), Value::Number(idx)) => {
+    fn member_by_indexer(&self, indexer: &Value, ctx: &Context) -> ResolveResult {
+        match indexer {
+            Value::Number(idx) => {
+                let idx = idx
+                    .to_usize()
+                    .ok_or(ExecutionError::UnsupportedListIndex(indexer.clone()))?;
+                match self {
+                    Value::List(items) => match items.list.get(idx) {
+                        Some(item) => Ok(item.into()),
+                        None => Ok(Value::List(vec![].into())),
+                    },
+                    Value::Tuple(items) => match items.list.get(idx) {
+                        Some(item) => Ok(item.into()),
+                        None => Ok(Value::Tuple(vec![].into())),
+                    },
+                    Value::String(str) => {
                         let from = idx.to_usize().unwrap_or(0);
-                        let to = (idx + dec!(1)).to_usize().unwrap_or(0);
+                        let to = from + 1;
                         match str.get(from..to) {
-                            None => Ok(Value::Null),
+                            None => Ok(Value::String("".to_string())),
                             Some(str) => Ok(Value::String(str.to_string())),
                         }
                     }
-                    (Value::List(_), index) => Err(ExecutionError::UnsupportedListIndex(index)),
-                    (value, index) => Err(ExecutionError::UnsupportedIndex(value, index)),
+                    value => Err(ExecutionError::UnsupportedIndex(
+                        value.clone(),
+                        indexer.clone(),
+                    )),
                 }
             }
-            Member::Attribute(name) => {
-                !unimplemented!()
-
-                // If the property is both an attribute and a method, then we
-                // give priority to the property. Maybe we can implement lookahead
-                // to see if the next token is a function call?
-                /*
-                match (child, ctx.has_function(name)) {
-                    (None, false) => ExecutionError::NoSuchKey(name.clone()).into(),
-                    (Some(child), _) => child.into(),
-                    (None, true) => Value::Function(name.clone(), Some(self.into())).into(),
-                }
-                */
-            }
+            index => Err(ExecutionError::UnsupportedIndex(
+                self.clone(),
+                index.clone(),
+            )),
         }
     }
 

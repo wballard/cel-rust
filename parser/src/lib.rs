@@ -278,7 +278,11 @@ where
             ),
             // function call application -- left is the 'to call', right is the arguments
             infix(left(10000), empty(), |left, right| {
-                Expression::FunctionCall(Box::new(left), Box::new(right))
+                match right {
+                    Expression::List(_) => Expression::Indexer(Box::new(left), Box::new(right)),
+                    // we're gonna be really loose and allow any following expression to be a function call
+                    any => Expression::FunctionCall(Box::new(left), Box::new(any)),
+                }
             }),
         ))
     })
@@ -483,6 +487,15 @@ mod tests {
     }
 
     #[rstest]
+    #[case("a[]", Indexer(Box::new(Expression::Identifier("a".into())), Box::new(Expression::List(vec![]))))]
+    #[case("a[1]", Indexer(Box::new(Expression::Identifier("a".into())), Box::new(Expression::List(vec![Atom(Number(dec!(1)))]))))]
+    #[case("a[1,2]", Indexer(Box::new(Expression::Identifier("a".into())), Box::new(Expression::List(vec![Atom(Number(dec!(1))), Atom(Number(dec!(2)))]))))]
+    #[case("'hello'[0]", Indexer(Box::new(Expression::Atom("hello".into())), Box::new(Expression::List(vec![Atom(Number(dec!(0)))]))))]
+    fn indexer(#[case] input: &str, #[case] expected: Expression) {
+        assert_parse_eq(input, expected);
+    }
+
+    #[rstest]
     #[case(
         "!false",
         Unary(
@@ -553,23 +566,6 @@ mod tests {
             ),
         );
     }
-
-    /* TODO: this needs to be a slice
-    #[test]
-    fn list_index_parsing() {
-        assert_parse_eq(
-            "[1,2,3][0]",
-            Member(
-                Box::new(List(vec![
-                    Expression::Atom(Number(dec!(1))),
-                    Expression::Atom(Number(dec!(2))),
-                    Expression::Atom(Number(dec!(3))),
-                ])),
-                Box::new(Index(Box::new(Expression::Atom(Number(dec!(0)))))),
-            ),
-        );
-    }
-    */
 
     #[test]
     fn mixed_type_list() {

@@ -1,6 +1,7 @@
 extern crate core;
 
 use cel_parser::*;
+use objects::ValueType;
 use std::convert::TryFrom;
 use thiserror::Error;
 
@@ -32,8 +33,8 @@ pub enum ExecutionError {
     NotSupportedAsMethod { method: String, target: Value },
     /// Indicates that the script attempted to use a value as a key in a map,
     /// but the type of the value was not supported as a key.
-    #[error("Unable to use value '{0:?}' as a key")]
-    UnsupportedKeyType(Value),
+    #[error("Unable to use value '{0:?}' as an indexer")]
+    UnsupportedKeyType(ValueType),
     #[error("Unexpected type: got '{got}', want '{want}'")]
     UnexpectedType { got: String, want: String },
     /// Indicates that the script attempted to reference a key on a type that
@@ -70,10 +71,6 @@ pub enum ExecutionError {
     /// Indicates that an unsupported type was used to index a list
     #[error("Cannot use value {0:?} to index {1:?}")]
     UnsupportedIndex(Value, Value),
-    /// Indicates that a [`Member::Fields`] construction was attempted
-    /// which is not yet supported.
-    #[error("Unsupported fields construction: {0:?}")]
-    UnsupportedFieldsConstruction(Member),
     /// Indicates that a function had an error during execution.
     #[error("Error executing function '{function}': {message}")]
     FunctionError {
@@ -110,7 +107,7 @@ impl ExecutionError {
     }
 
     pub fn unsupported_key_type(value: Value) -> Self {
-        ExecutionError::UnsupportedKeyType(value)
+        ExecutionError::UnsupportedKeyType(value.type_of())
     }
 
     pub fn missing_argument_or_target() -> Self {
@@ -159,18 +156,11 @@ impl TryFrom<&str> for Program {
 #[cfg(test)]
 mod tests {
     use crate::context::Context;
-    use crate::objects::ResolveResult;
     use crate::Program;
     use rstest::rstest;
     use std::convert::TryInto;
     use std::fs;
     use std::path::PathBuf;
-
-    /// Tests the provided script and returns the result. An optional context can be provided.
-    pub(crate) fn test_script(script: &str, ctx: Option<Context>) -> ResolveResult {
-        let program = Program::compile(script).unwrap();
-        program.execute(&ctx.unwrap_or_default())
-    }
 
     fn check_script(script: &str, expected: &str) {
         let program = Program::compile(script).unwrap();

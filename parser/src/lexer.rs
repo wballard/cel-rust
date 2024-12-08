@@ -4,7 +4,7 @@ use chumsky::extra;
 use chumsky::input::BorrowInput;
 use chumsky::prelude::*;
 use chumsky::Parser;
-
+use rust_decimal_macros::dec;
 use std::fmt::*;
 
 /// Keep track of a token with its source span.
@@ -200,6 +200,27 @@ mod tests {
                 ),
                 (Token::Identifier("goo".into()), SimpleSpan::new(4, 7)),
                 (Token::Parens(vec![]), SimpleSpan::new(7, 9)),
+            ]
+        );
+    }
+
+    #[test]
+    fn indexer() {
+        let input = "foo[0]";
+        let result = lexer().parse(input).into_result();
+        assert!(result.is_ok());
+        let tokens = result.unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                (Token::Identifier("foo".into()), SimpleSpan::new(0, 3)),
+                (
+                    Token::Brackets(vec![(
+                        Token::Atom(Atom::Number(dec!(0))),
+                        SimpleSpan::new(4, 5)
+                    )]),
+                    SimpleSpan::new(3, 6)
+                ),
             ]
         );
     }

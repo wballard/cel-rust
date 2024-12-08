@@ -11,6 +11,7 @@ pub enum Expression {
     Binary(Box<Expression>, Operator, Box<Expression>),
     Ternary(Box<Expression>, Box<Expression>, Box<Expression>),
     FunctionCall(Box<Expression>, Box<Expression>),
+    Indexer(Box<Expression>, Box<Expression>),
     List(Vec<Expression>),
     Tuple(Vec<Expression>),
     Set(Vec<Expression>),
@@ -29,13 +30,6 @@ impl Expression {
             _ => vec![],
         }
     }
-}
-
-/// Represents a member access in an expression.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Member {
-    Attribute(Identifier),
-    Index(Box<Expression>),
 }
 
 /// A collection of all the references that an expression makes to variables and functions.
@@ -142,6 +136,10 @@ impl Expression {
                 e3._references(variables, functions);
             }
             Expression::FunctionCall(left, right) => {
+                left._references(variables, functions);
+                right._references(variables, functions);
+            }
+            Expression::Indexer(left, right) => {
                 left._references(variables, functions);
                 right._references(variables, functions);
             }

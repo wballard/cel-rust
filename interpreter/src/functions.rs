@@ -502,17 +502,6 @@ pub fn max(ftx: &FunctionContext, Arguments(args): Arguments) -> Result<Value> {
 
 #[cfg(test)]
 mod tests {
-    use crate::context::Context;
-    use crate::tests::test_script;
-
-    fn assert_script(input: &(&str, &str)) {
-        assert_eq!(test_script(input.1, None), Ok(true.into()), "{}", input.0);
-    }
-
-    #[test]
-    fn test_has() {
-        assert!(false, "TODO: implement entity has");
-    }
 
     #[cfg(feature = "regex")]
     #[test]
