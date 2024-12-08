@@ -606,9 +606,36 @@ impl<'a> Value {
                             _ => {
                                 let mut res = Vec::with_capacity(list.list.len());
                                 for idx in list.list.iter() {
-                                    res.push(target.member_by_indexer(idx, ctx)?);
+                                    match target.member_by_indexer(idx, ctx)? {
+                                        Value::List(v) => res.extend(v.list),
+                                        Value::Tuple(v) => res.extend(v.list),
+                                        Value::String(v) => res.push(Value::String(v)),
+                                        _ => {
+                                            return Err(ExecutionError::UnsupportedIndex(
+                                                target.clone(),
+                                                idx.clone(),
+                                            ))
+                                        }
+                                    }
                                 }
-                                Ok(Value::List(res.into()))
+                                match target {
+                                    Value::List(_) => Ok(Value::List(res.into())),
+                                    Value::Tuple(_) => Ok(Value::Tuple(res.into())),
+                                    Value::String(_) => {
+                                        let s = res
+                                            .iter()
+                                            .map(|v| match v {
+                                                Value::String(s) => s.clone(),
+                                                _ => unreachable!(),
+                                            })
+                                            .collect::<String>();
+                                        Ok(Value::String(s))
+                                    }
+                                    _ => Err(ExecutionError::UnsupportedIndex(
+                                        target.clone(),
+                                        indexes.clone(),
+                                    )),
+                                }
                             }
                         }
                     }
