@@ -1,0 +1,3 @@
+'foobar'.matches('^[a-zA-Z]*$')
+---
+true
