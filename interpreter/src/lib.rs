@@ -137,7 +137,6 @@ impl Program {
     /// let program = Program::compile("size(foo) > 0").unwrap();
     /// let references = program.references();
     ///
-    /// assert!(references.has_function("size"));
     /// assert!(references.has_variable("foo"));
     /// ```
     pub fn references(&self) -> ExpressionReferences {

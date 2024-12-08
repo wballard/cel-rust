@@ -4,8 +4,7 @@ use chumsky::extra;
 use chumsky::input::BorrowInput;
 use chumsky::prelude::*;
 use chumsky::Parser;
-use rust_decimal_macros::dec;
-use std::fmt::*;
+use std::fmt::{Display, Formatter};
 
 /// Keep track of a token with its source span.
 pub type Spanned<T> = (T, SimpleSpan);
@@ -114,6 +113,7 @@ pub fn make_input(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_decimal_macros::dec;
 
     #[test]
     fn empty_tuple() {

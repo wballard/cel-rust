@@ -49,10 +49,6 @@ where
     pub(crate) fn get(&self, name: &Key) -> Option<Box<dyn Function>> {
         self.functions.get(name).map(|f| f.clone_box())
     }
-
-    pub(crate) fn has(&self, name: &Key) -> bool {
-        self.functions.contains_key(name)
-    }
 }
 
 /// A trait for types that can be converted into a [`ResolveResult`] by calling

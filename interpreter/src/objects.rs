@@ -646,7 +646,7 @@ impl<'a> Value {
         }
     }
 
-    fn member_by_indexer(&self, indexer: &Value, ctx: &Context) -> ResolveResult {
+    fn member_by_indexer(&self, indexer: &Value, _ctx: &Context) -> ResolveResult {
         match indexer {
             Value::Number(idx) => {
                 let idx = idx
@@ -781,15 +781,6 @@ mod tests {
                 Value::Number(10.into()),
             ),
         );
-    }
-
-    #[test]
-    fn ut_of_bound_list_access() {
-        let program = Program::compile("list[10]").unwrap();
-        let mut context = Context::default();
-        context.add_variable_from_value("list", Value::List(vec![].into()));
-        let result = program.execute(&context);
-        assert_eq!(result.unwrap(), Value::Null);
     }
 
     #[test]

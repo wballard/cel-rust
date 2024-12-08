@@ -72,13 +72,6 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub(crate) fn has_function(&self, name: &Identifier) -> bool {
-        match self {
-            Context::Root { functions, .. } => functions.has(name),
-            Context::Child { parent, .. } => parent.has_function(name),
-        }
-    }
-
     pub(crate) fn get_function(&self, name: &Identifier) -> Option<Box<dyn Function>> {
         match self {
             Context::Root { functions, .. } => functions.get(name),

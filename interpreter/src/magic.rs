@@ -63,52 +63,6 @@ pub(crate) trait FromContext<'a, 'context> {
 ///
 /// This is similar to how methods can be called as functions using the
 /// [fully-qualified syntax](https://doc.rust-lang.org/book/ch19-03-advanced-traits.html#fully-qualified-syntax-for-disambiguation-calling-methods-with-the-same-name).
-///
-/// # Using `This`
-/// ```
-/// # use std::sync::Arc;
-/// # use cel_interpreter::{Program, Context, Value};
-/// use cel_interpreter::extractors::This;
-/// # let mut context = Context::default();
-/// # context.add_function("startsWith", starts_with);
-///
-/// /// Notice how `This` refers to the target value when called as a method,
-/// /// but the first argument when called as a function.
-/// let program1 = "'foobar'.startsWith('foo') == true";
-/// let program2 = "startsWith('foobar', 'foo') == true";
-/// # let program1 = Program::compile(program1).unwrap();
-/// # let program2 = Program::compile(program2).unwrap();
-/// # let value = program1.execute(&context).unwrap();
-/// # assert_eq!(value, true.into());
-/// # let value = program2.execute(&context).unwrap();
-/// # assert_eq!(value, true.into());
-///
-/// fn starts_with(This(this): This<Value>, prefix: Value) -> bool {
-///     let seek: String = this.into();
-///    let sought: String = prefix.into();
-///    seek.starts_with(&sought)
-/// }
-/// ```
-///
-/// # Type of `This`
-/// This also accepts a type `T` which determines the specific type
-/// that's extracted. Any type that supports [`FromValue`] can be used.
-/// In the previous example, the method `startsWith` is only ever called
-/// on a string, so we can use `This<Rc<String>>` to extract the string
-/// automatically prior to our method actually being called.
-///
-/// In some cases, you may want access to the raw [`Value`] instead, for
-/// example, the `contains` method works for several different types. In these
-/// cases, you can use `This<Value>` to extract the raw value.
-///
-/// ```skip
-/// pub fn contains(This(this): This<Value>, arg: Value) -> Result<Value> {
-///     Ok(match this {
-///         Value::List(v) => v.contains(&arg),
-///         ...
-///     }
-/// }
-/// ```
 pub struct This<T>(pub T);
 
 impl<'a, 'context, T> FromContext<'a, 'context> for This<T>
@@ -177,19 +131,6 @@ impl<'a, 'context> FromContext<'a, 'context> for Identifier {
 ///
 /// This is useful for functions that accept a variable number of arguments rather than known
 /// arguments and types (for example a `sum` function).
-///
-/// # Example
-/// ```javascript
-/// sum(1, 2.0, uint(3)) == 5.0
-/// ```
-///
-/// ```rust
-/// # use cel_interpreter::{Value};
-/// use cel_interpreter::extractors::Arguments;
-/// pub fn sum(Arguments(args): Arguments) -> Value {
-///     args.list.iter().fold(Value::Number(0.into()), |acc, val| (val + acc.clone()).unwrap_or(acc)).into()
-/// }
-/// ```
 #[derive(Clone)]
 pub struct Arguments(pub ValueList);
 

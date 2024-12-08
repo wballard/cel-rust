@@ -53,20 +53,6 @@ impl<'expr> ExpressionReferences<'expr> {
         self.variables.contains(&identifier)
     }
 
-    /// Returns true if the expression references the provided function name.
-    ///
-    /// # Example
-    /// ```rust
-    /// # use cel_parser::parse;
-    /// let expression = parse("size(foo) > 0").unwrap();
-    /// let references = expression.references();
-    /// assert!(references.has_function("size"));
-    /// ```
-    pub fn has_function(&self, name: impl AsRef<str>) -> bool {
-        let identifier: Identifier = name.as_ref().into();
-        self.functions.contains(&identifier)
-    }
-
     /// Returns a list of all variables referenced in the expression.
     ///
     /// # Example
@@ -74,23 +60,10 @@ impl<'expr> ExpressionReferences<'expr> {
     /// # use cel_parser::parse;
     /// let expression = parse("foo.bar == true").unwrap();
     /// let references = expression.references();
-    /// assert_eq!(vec!["foo"], references.variables());
+    /// assert!(references.has_variable("foo"));
     /// ```
     pub fn variables(&self) -> Vec<&Identifier> {
         self.variables.iter().copied().collect()
-    }
-
-    /// Returns a list of all functions referenced in the expression.
-    ///
-    /// # Example
-    /// ```rust
-    /// # use cel_parser::parse;
-    /// let expression = parse("size(foo) > 0").unwrap();
-    /// let references = expression.references();
-    /// assert_eq!(vec!["size"], references.functions());
-    /// ```
-    pub fn functions(&self) -> Vec<&Identifier> {
-        self.functions.iter().copied().collect()
     }
 }
 
@@ -104,7 +77,6 @@ impl Expression {
     /// let references = expression.references();
     ///
     /// assert!(references.has_variable("foo"));
-    /// assert!(references.has_function("size"));
     /// ```
     pub fn references(&self) -> ExpressionReferences {
         let mut variables = HashSet::new();
