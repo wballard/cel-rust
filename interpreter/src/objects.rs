@@ -455,45 +455,6 @@ impl<'a> Value {
                     FunctionContext::new(Identifier(op.to_string()), None, ctx, arguments);
                 func.call_with_context(&mut ctx)
             }
-            /*
-            Expression::Relation(left, op, right) => {
-                let left = Value::resolve(left, ctx)?;
-                let right = Value::resolve(right, ctx)?;
-                let res = match op {
-                    RelationOp::LessThan => {
-                        left.partial_cmp(&right)
-                            .ok_or(ExecutionError::ValuesNotComparable(left, right))?
-                            == Ordering::Less
-                    }
-                    RelationOp::LessThanEq => {
-                        left.partial_cmp(&right)
-                            .ok_or(ExecutionError::ValuesNotComparable(left, right))?
-                            != Ordering::Greater
-                    }
-                    RelationOp::GreaterThan => {
-                        left.partial_cmp(&right)
-                            .ok_or(ExecutionError::ValuesNotComparable(left, right))?
-                            == Ordering::Greater
-                    }
-                    RelationOp::GreaterThanEq => {
-                        left.partial_cmp(&right)
-                            .ok_or(ExecutionError::ValuesNotComparable(left, right))?
-                            != Ordering::Less
-                    }
-                    RelationOp::Equals => right.eq(&left),
-                    RelationOp::NotEquals => right.ne(&left),
-                    RelationOp::In => match (left, right) {
-                        (Value::String(l), Value::String(r)) => r.contains(&*l),
-                        (any, Value::List(v)) => v.list.contains(&any),
-                        //TODO: implement for TagSet
-                        (left, right) => Err(ExecutionError::ValuesNotComparable(left, right))?,
-                    },
-                    RelationOp::MemberOf => match (left, right) {
-                        _ => unimplemented!(),
-                    },
-                };
-                Value::Bool(res).into()
-            }
             Expression::Ternary(cond, left, right) => {
                 let cond = Value::resolve(cond, ctx)?;
                 if cond.to_bool() {
@@ -502,26 +463,6 @@ impl<'a> Value {
                     Value::resolve(right, ctx)
                 }
             }
-            Expression::Unary(op, expr) => {
-                let expr = Value::resolve(expr, ctx)?;
-                match op {
-                    UnaryOp::Not => Ok(Value::Bool(!expr.to_bool())),
-                    UnaryOp::DoubleNot => Ok(Value::Bool(expr.to_bool())),
-                    UnaryOp::Minus => match expr {
-                        Value::Number(i) => Ok(Value::Number(-i)),
-                        value => Err(ExecutionError::UnsupportedUnaryOperator("minus", value)),
-                    },
-                    UnaryOp::DoubleMinus => match expr {
-                        Value::Number(_) => Ok(expr),
-                        value => Err(ExecutionError::UnsupportedUnaryOperator("negate", value)),
-                    },
-                }
-            }
-            Expression::Member(left, right) => {
-                let left = Value::resolve(left, ctx)?;
-                left.member(right, ctx)
-            }
-            */
             Expression::List(items) => {
                 let list = items
                     .iter()
