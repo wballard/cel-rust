@@ -240,6 +240,7 @@ pub fn has(ftx: &FunctionContext) -> Result<Value> {
     }
     .into()
 }
+// TODO: test with slice
 
 /// Maps the provided list to a new list by applying an expression to each
 /// input item.
@@ -408,6 +409,9 @@ pub fn exists(
     }
 }
 
+// TODO: exist_one
+// TODO: alias exist, exist_one
+
 pub mod time {
     use super::Result;
     use crate::magic::This;
@@ -499,3 +503,5 @@ pub fn max(ftx: &FunctionContext, Arguments(args): Arguments) -> Result<Value> {
         Err(e) => Err(e),
     }
 }
+
+// TODO: min

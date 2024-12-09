@@ -169,6 +169,7 @@ impl<'a> Default for Context<'a> {
         ctx.add_operator(Operator::Relation(RelationOp::GreaterThan), gt);
         ctx.add_operator(Operator::Relation(RelationOp::GreaterThanEq), gte);
         ctx.add_operator(Operator::Relation(RelationOp::In), is_in);
+        ctx.add_operator(Operator::Relation(RelationOp::Range), range);
         // TODO: do we actually need a member operator implementation?
 
         ctx.add_function("contains", functions::contains);

@@ -17,8 +17,21 @@ pub struct ValueList {
     pub list: Vec<Value>,
 }
 
+impl ValueList {
+    fn empty() -> Self {
+        ValueList { list: vec![] }
+    }
+}
+
 impl From<Vec<Value>> for ValueList {
     fn from(list: Vec<Value>) -> Self {
+        ValueList { list }
+    }
+}
+
+impl From<Vec<&Value>> for ValueList {
+    fn from(list: Vec<&Value>) -> Self {
+        let list = list.into_iter().map(|v| v.clone()).collect();
         ValueList { list }
     }
 }
@@ -55,6 +68,7 @@ pub enum Value {
     Tuple(ValueList),
     Set(ValueSet),
     Function(Identifier, Option<Box<Value>>),
+    Range(Box<Value>, Box<Value>),
     // Atoms
     Number(Decimal),
     String(String),
@@ -109,6 +123,26 @@ impl TryFrom<Value> for Decimal {
     }
 }
 
+impl TryFrom<&Value> for usize {
+    type Error = ExecutionError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Number(v) => match v.to_usize() {
+                Some(v) => Ok(v),
+                None => Err(ExecutionError::UnexpectedType {
+                    got: v.to_string(),
+                    want: ValueType::Number.to_string(),
+                }),
+            },
+            _ => Err(ExecutionError::UnexpectedType {
+                got: value.type_of().to_string(),
+                want: ValueType::Number.to_string(),
+            }),
+        }
+    }
+}
+
 /// Reverse type mapping to allow type inspection.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ValueType {
@@ -125,6 +159,7 @@ pub enum ValueType {
     Ulid,
     Tag,
     TagSet,
+    Range,
 }
 
 impl Display for ValueType {
@@ -143,6 +178,7 @@ impl Display for ValueType {
             ValueType::Null => write!(f, "null"),
             ValueType::Ulid => write!(f, "ulid"),
             ValueType::Tag => write!(f, "tag"),
+            ValueType::Range => write!(f, "range"),
         }
     }
 }
@@ -162,6 +198,7 @@ impl Value {
             Value::Ulid(_) => ValueType::Ulid,
             Value::HashTag(_) => ValueType::Tag,
             Value::Set(_) => ValueType::TagSet,
+            Value::Range(_, _) => ValueType::Range,
         }
     }
 
@@ -209,6 +246,7 @@ impl Display for Value {
             Value::Timestamp(v) => write!(f, "{}", v.to_rfc3339_opts(SecondsFormat::Millis, true)),
             Value::Ulid(v) => write!(f, "&{}", v),
             Value::HashTag(v) => write!(f, "{}", v),
+            Value::Range(low, high) => write!(f, "{}..{}", low, high),
         }
     }
 }
@@ -322,6 +360,10 @@ impl std::hash::Hash for Value {
             Value::Ulid(v) => v.hash(state),
             Value::HashTag(v) => v.hash(state),
             Value::Set(v) => v.hash(state),
+            Value::Range(low, high) => {
+                low.hash(state);
+                high.hash(state);
+            }
         }
     }
 }
@@ -530,88 +572,107 @@ impl<'a> Value {
             Expression::Indexer(target, indexes) => {
                 let target = Value::resolve(target, ctx)?;
                 let indexes = Value::resolve(indexes, ctx)?;
-                match &indexes {
-                    Value::List(list) => {
-                        // coming back with a single value if there is only one index
-                        match list.list.len() {
-                            0 => match target {
-                                Value::List(_) => Ok(Value::List(vec![].into())),
-                                Value::Tuple(_) => Ok(Value::Tuple(vec![].into())),
-                                Value::String(_) => Ok(Value::String("".to_string())),
-                                _ => Err(ExecutionError::UnsupportedIndex(
-                                    target.clone(),
-                                    indexes.clone(),
-                                )),
-                            },
-                            1 => target.member_by_indexer(list.list.first().unwrap(), ctx),
-                            _ => {
-                                let mut res = Vec::with_capacity(list.list.len());
-                                for idx in list.list.iter() {
-                                    match target.member_by_indexer(idx, ctx)? {
-                                        Value::List(v) => res.extend(v.list),
-                                        Value::Tuple(v) => res.extend(v.list),
-                                        Value::String(v) => res.push(Value::String(v)),
-                                        _ => {
-                                            return Err(ExecutionError::UnsupportedIndex(
-                                                target.clone(),
-                                                idx.clone(),
-                                            ))
-                                        }
-                                    }
-                                }
-                                match target {
-                                    Value::List(_) => Ok(Value::List(res.into())),
-                                    Value::Tuple(_) => Ok(Value::Tuple(res.into())),
-                                    Value::String(_) => {
-                                        let s = res
-                                            .iter()
-                                            .map(|v| match v {
-                                                Value::String(s) => s.clone(),
-                                                _ => unreachable!(),
-                                            })
-                                            .collect::<String>();
-                                        Ok(Value::String(s))
-                                    }
-                                    _ => Err(ExecutionError::UnsupportedIndex(
-                                        target.clone(),
-                                        indexes.clone(),
-                                    )),
-                                }
-                            }
-                        }
-                    }
-                    _ => Err(ExecutionError::UnsupportedKeyType(ValueType::List)),
-                }
+                target.member_by_indexer(ctx, &indexes)
             }
-            _ => unimplemented!(),
+            Expression::Empty => Ok(Value::Set(vec![].into())),
+            Expression::Multiple(exprs) => {
+                let mut res = Vec::with_capacity(exprs.len());
+                for expr in exprs {
+                    res.push(Value::resolve(expr, ctx)?);
+                }
+                Ok(Value::List(res.into()))
+            }
         }
     }
 
-    fn member_by_indexer(&self, indexer: &Value, _ctx: &Context) -> ResolveResult {
+    fn member_by_indexer(&self, ctx: &Context, indexer: &Value) -> ResolveResult {
         match indexer {
+            Value::Range(low, high) => match (&**low, &**high) {
+                (Value::Number(low), Value::Number(high)) => {
+                    let low = low
+                        .to_usize()
+                        .ok_or(ExecutionError::UnsupportedListIndex(indexer.clone()))?;
+                    let high = high
+                        .to_usize()
+                        .ok_or(ExecutionError::UnsupportedListIndex(indexer.clone()))?;
+                    match self {
+                        // adding one here -- we have inclusive ranges
+                        Value::List(items) => {
+                            let list = items.list.iter().skip(low).take(high - low + 1);
+                            Ok(Value::List(list.cloned().collect::<Vec<_>>().into()))
+                        }
+                        Value::String(str) => match str.get(low..(high + 1)) {
+                            None => Ok(Value::String("".to_string())),
+                            Some(str) => Ok(Value::String(str.to_string())),
+                        },
+                        _ => Err(ExecutionError::UnsupportedListIndex(indexer.clone())),
+                    }
+                }
+                _ => Err(ExecutionError::UnsupportedListIndex(indexer.clone())),
+            },
+            Value::List(indexes) => match self {
+                Value::List(items) => match indexes.list.len() {
+                    0 => Ok(Value::List(ValueList::empty())),
+                    1 => match indexes.list.first() {
+                        Some(idx) => self.member_by_indexer(ctx, idx),
+                        _ => Err(ExecutionError::UnsupportedListIndex(indexer.clone())),
+                    },
+                    _ => {
+                        let indexes = indexes
+                            .list
+                            .iter()
+                            .flat_map(|v| v.try_into())
+                            .collect::<Vec<usize>>();
+                        let values = indexes
+                            .iter()
+                            .flat_map(|idx| items.list.get(*idx))
+                            .collect::<Vec<&Value>>();
+                        Ok(Value::List(values.into()))
+                    }
+                },
+                Value::String(v) => match indexes.list.len() {
+                    0 => Ok(Value::String("".to_string())),
+                    1 => match indexes.list.first() {
+                        Some(idx) => self.member_by_indexer(ctx, idx),
+                        _ => Err(ExecutionError::UnsupportedListIndex(indexer.clone())),
+                    },
+                    _ => {
+                        let indexes = indexes
+                            .list
+                            .iter()
+                            .flat_map(|v| v.try_into())
+                            .collect::<Vec<usize>>();
+                        let values = indexes
+                            .iter()
+                            .flat_map(|idx| v.get(*idx..(*idx + 1)))
+                            .collect::<String>();
+
+                        Ok(Value::String(values))
+                    }
+                },
+                _ => Err(ExecutionError::UnsupportedIndex(
+                    self.clone(),
+                    indexer.clone(),
+                )),
+            },
             Value::Number(idx) => {
                 let idx = idx
                     .to_usize()
                     .ok_or(ExecutionError::UnsupportedListIndex(indexer.clone()))?;
                 match self {
-                    Value::List(items) => match items.list.get(idx) {
-                        Some(item) => Ok(item.into()),
-                        None => Ok(Value::List(vec![].into())),
-                    },
-                    Value::Tuple(items) => match items.list.get(idx) {
-                        Some(item) => Ok(item.into()),
-                        None => Ok(Value::Tuple(vec![].into())),
-                    },
-                    Value::String(str) => {
-                        let from = idx.to_usize().unwrap_or(0);
-                        let to = from + 1;
-                        match str.get(from..to) {
-                            None => Ok(Value::String("".to_string())),
-                            Some(str) => Ok(Value::String(str.to_string())),
+                    Value::List(items) => {
+                        let item = items.list.get(idx);
+                        match item {
+                            Some(item) => Ok(item.into()),
+                            None => Ok(Value::List(ValueList::empty())),
                         }
                     }
-                    value => Err(ExecutionError::UnsupportedIndex(
-                        value.clone(),
+                    Value::String(v) => match v.get(idx..(idx + 1)) {
+                        Some(str) => Ok(Value::String(str.to_string())),
+                        None => Ok(Value::String("".to_string())),
+                    },
+                    _ => Err(ExecutionError::UnsupportedIndex(
+                        self.clone(),
                         indexer.clone(),
                     )),
                 }
@@ -638,6 +699,7 @@ impl<'a> Value {
             Value::Function(_, _) => true,
             Value::Ulid(_) => true,
             Value::HashTag(_) => true,
+            Value::Range(_, _) => true,
         }
     }
 }

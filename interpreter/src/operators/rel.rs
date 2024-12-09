@@ -47,3 +47,7 @@ pub fn is_in(_: &FunctionContext, left: Value, right: Value) -> Result<Value, Ex
     }
     .into())
 }
+
+pub fn range(_: &FunctionContext, left: Value, right: Value) -> Result<Value, ExecutionError> {
+    Ok(Value::Range(Box::new(left), Box::new(right)))
+}

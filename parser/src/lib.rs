@@ -206,12 +206,23 @@ where
             }),
             // relation operators
             infix(
-                left(20000),
+                left(20010),
                 just(Token::Operator(Operator::Relation(RelationOp::GetMember))),
                 |left, right| {
                     Expression::Binary(
                         Box::new(left),
                         Operator::Relation(RelationOp::GetMember),
+                        Box::new(right),
+                    )
+                },
+            ),
+            infix(
+                left(20000),
+                just(Token::Operator(Operator::Relation(RelationOp::Range))),
+                |left, right| {
+                    Expression::Binary(
+                        Box::new(left),
+                        Operator::Relation(RelationOp::Range),
                         Box::new(right),
                     )
                 },

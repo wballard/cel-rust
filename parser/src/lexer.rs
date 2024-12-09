@@ -224,4 +224,29 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn indexer_range() {
+        let input = "foo[0..1]";
+        let result = lexer().parse(input).into_result();
+        assert!(result.is_ok());
+        let tokens = result.unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                (Token::Identifier("foo".into()), SimpleSpan::new(0, 3)),
+                (
+                    Token::Brackets(vec![
+                        (Token::Atom(Atom::Number(dec!(0))), SimpleSpan::new(4, 5)),
+                        (
+                            Token::Operator(Operator::Relation(RelationOp::Range)),
+                            SimpleSpan::new(5, 7)
+                        ),
+                        (Token::Atom(Atom::Number(dec!(1))), SimpleSpan::new(7, 8)),
+                    ]),
+                    SimpleSpan::new(3, 9)
+                ),
+            ]
+        );
+    }
 }

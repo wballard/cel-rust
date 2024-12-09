@@ -16,6 +16,7 @@ pub enum RelationOp {
     NotEquals,
     In,
     GetMember,
+    Range,
 }
 
 impl Display for RelationOp {
@@ -29,6 +30,7 @@ impl Display for RelationOp {
             RelationOp::NotEquals => "!=",
             RelationOp::In => "in",
             RelationOp::GetMember => ".",
+            RelationOp::Range => "..",
         };
         write!(f, "{}", op)
     }
@@ -116,6 +118,7 @@ pub fn parse_relation_op<'a>() -> impl Parser<'a, &'a str, RelationOp, extra::Er
         op("in").map(|_| RelationOp::In),
         op("<").map(|_| RelationOp::LessThan),
         op(">").map(|_| RelationOp::GreaterThan),
+        op("..").map(|_| RelationOp::Range),
         op(".").map(|_| RelationOp::GetMember),
     ))
 }
