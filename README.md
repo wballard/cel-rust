@@ -9,10 +9,9 @@ is ideal for lightweight expression evaluation when a fully sandboxed scripting 
 
 This version of CEL has some changes from the base Google language:
 
-* `()` delimited tuples
 * `{}` delimited sets
 * Numbers are 128 bit high precisiion decimal
 * `#tag` hashtags
 * Elimination of name:value maps
 * `^^` exlcusive or operator
-* `[low..high]` and `[0, 1, 2]` multiple list, tuple, set, and string slicing
+* `[low..high]` and `[0, 1, 2]` multiple list, set, and string slicing

@@ -116,7 +116,7 @@ mod tests {
     use rust_decimal_macros::dec;
 
     #[test]
-    fn empty_tuple() {
+    fn empty_arguments() {
         let input = "()";
         let result = lexer().parse(input).into_result();
         assert!(result.is_ok());

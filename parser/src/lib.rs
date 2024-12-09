@@ -403,7 +403,7 @@ mod tests {
         Atom(Number(dec!(2))),
         Atom(Number(dec!(3))),
     ]))]
-    fn tuple(#[case] input: &str, #[case] expected: Expression) {
+    fn function_arguments(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }
 
