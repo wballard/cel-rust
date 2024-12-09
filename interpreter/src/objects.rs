@@ -31,7 +31,7 @@ impl From<Vec<Value>> for ValueList {
 
 impl From<Vec<&Value>> for ValueList {
     fn from(list: Vec<&Value>) -> Self {
-        let list = list.into_iter().map(|v| v.clone()).collect();
+        let list = list.into_iter().cloned().collect();
         ValueList { list }
     }
 }
@@ -65,9 +65,9 @@ impl From<ValueSet> for ValueList {
 pub enum Value {
     // structures
     List(ValueList),
-    Tuple(ValueList),
     Set(ValueSet),
     Function(Identifier, Option<Box<Value>>),
+    FunctionArguments(ValueList),
     Range(Box<Value>, Box<Value>),
     // Atoms
     Number(Decimal),
@@ -84,7 +84,7 @@ impl Value {
     pub fn len(&self) -> usize {
         match self {
             Value::List(v) => v.list.len(),
-            Value::Tuple(v) => v.list.len(),
+            Value::FunctionArguments(v) => v.list.len(),
             Value::Set(v) => v.set.len(),
             Value::String(v) => v.len(),
             Value::HashTag(v) => v.len(),
@@ -95,7 +95,7 @@ impl Value {
     pub fn is_empty(&self) -> bool {
         match self {
             Value::List(v) => v.list.is_empty(),
-            Value::Tuple(v) => v.list.is_empty(),
+            Value::FunctionArguments(v) => v.list.is_empty(),
             Value::Set(v) => v.set.is_empty(),
             Value::String(v) => v.is_empty(),
             Value::HashTag(v) => v.is_empty(),
@@ -147,7 +147,7 @@ impl TryFrom<&Value> for usize {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ValueType {
     List,
-    Tuple,
+    FunctionArguments,
     Function,
     Number,
     String,
@@ -166,9 +166,9 @@ impl Display for ValueType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ValueType::List => write!(f, "list"),
-            ValueType::Tuple => write!(f, "tuple"),
             ValueType::TagSet => write!(f, "set"),
             ValueType::Function => write!(f, "function"),
+            ValueType::FunctionArguments => write!(f, "function_arguments"),
             ValueType::Number => write!(f, "number"),
             ValueType::String => write!(f, "string"),
             ValueType::Bytes => write!(f, "bytes"),
@@ -187,7 +187,7 @@ impl Value {
     pub fn type_of(&self) -> ValueType {
         match self {
             Value::List(_) => ValueType::List,
-            Value::Tuple(_) => ValueType::Tuple,
+            Value::FunctionArguments(_) => ValueType::FunctionArguments,
             Value::Function(_, _) => ValueType::Function,
             Value::Number(_) => ValueType::Number,
             Value::String(_) => ValueType::String,
@@ -230,7 +230,7 @@ impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::List(v) => delimit_display(v.list.iter(), '[', ']', f),
-            Value::Tuple(v) => delimit_display(v.list.iter(), '(', ')', f),
+            Value::FunctionArguments(v) => delimit_display(v.list.iter(), '(', ')', f),
             Value::Set(v) => delimit_display(v.set.iter(), '{', '}', f),
             Value::Function(name, target) => match target {
                 Some(target) => write!(f, "{}.{}", target, name),
@@ -344,7 +344,7 @@ impl std::hash::Hash for Value {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         match self {
             Value::List(list) => list.hash(state),
-            Value::Tuple(list) => list.hash(state),
+            Value::FunctionArguments(list) => list.hash(state),
             Value::Function(name, target) => {
                 name.hash(state);
                 target.hash(state);
@@ -442,7 +442,7 @@ impl From<Value> for String {
             Value::Timestamp(v) => v.to_rfc3339(),
             Value::Ulid(v) => format!("&{}", v),
             Value::List(v) => delimit(v.list.iter(), '[', ']'),
-            Value::Tuple(v) => delimit(v.list.iter(), '(', ')'),
+            Value::FunctionArguments(v) => delimit(v.list.iter(), '(', ')'),
             Value::Set(v) => delimit(v.set.iter(), '{', '}'),
             _ => "".to_string(),
         }
@@ -512,12 +512,12 @@ impl<'a> Value {
                     .collect::<Result<Vec<_>, _>>()?;
                 Value::List(list.into()).into()
             }
-            Expression::Tuple(items) => {
+            Expression::FunctionArguments(items) => {
                 let list = items
                     .iter()
                     .map(|i| Value::resolve(i, ctx))
                     .collect::<Result<Vec<_>, _>>()?;
-                Value::Tuple(list.into()).into()
+                Value::FunctionArguments(list.into()).into()
             }
             Expression::Set(items) => {
                 let list = items
@@ -585,7 +585,7 @@ impl<'a> Value {
         }
     }
 
-    fn member_by_indexer(&self, ctx: &Context, indexer: &Value) -> ResolveResult {
+    fn member_by_indexer(&self, _ctx: &Context, indexer: &Value) -> ResolveResult {
         match indexer {
             Value::Range(low, high) => match (&**low, &**high) {
                 (Value::Number(low), Value::Number(high)) => {
@@ -614,7 +614,7 @@ impl<'a> Value {
                 Value::List(items) => match indexes.list.len() {
                     0 => Ok(Value::List(ValueList::empty())),
                     1 => match indexes.list.first() {
-                        Some(idx) => self.member_by_indexer(ctx, idx),
+                        Some(idx) => self.member_by_indexer(_ctx, idx),
                         _ => Err(ExecutionError::UnsupportedListIndex(indexer.clone())),
                     },
                     _ => {
@@ -633,7 +633,7 @@ impl<'a> Value {
                 Value::String(v) => match indexes.list.len() {
                     0 => Ok(Value::String("".to_string())),
                     1 => match indexes.list.first() {
-                        Some(idx) => self.member_by_indexer(ctx, idx),
+                        Some(idx) => self.member_by_indexer(_ctx, idx),
                         _ => Err(ExecutionError::UnsupportedListIndex(indexer.clone())),
                     },
                     _ => {
@@ -688,7 +688,7 @@ impl<'a> Value {
     pub fn to_bool(&self) -> bool {
         match self {
             Value::List(v) => !v.list.is_empty(),
-            Value::Tuple(v) => !v.list.is_empty(),
+            Value::FunctionArguments(v) => !v.list.is_empty(),
             Value::Set(v) => !v.set.is_empty(),
             Value::Number(v) => *v != dec!(0),
             Value::String(v) => !v.is_empty(),

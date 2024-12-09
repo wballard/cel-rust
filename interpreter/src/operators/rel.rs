@@ -35,7 +35,6 @@ pub fn is_in(_: &FunctionContext, left: Value, right: Value) -> Result<Value, Ex
     Ok(match right {
         Value::List(v) => v.list.contains(&left),
         Value::Set(v) => v.set.contains(&left),
-        Value::Tuple(v) => v.list.contains(&left),
         Value::String(s) => {
             if let Value::String(arg) = left {
                 s.contains(arg.as_str())

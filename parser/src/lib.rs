@@ -135,7 +135,7 @@ where
             // simple atoms
             atoms,
             // empty nests
-            just(Token::Parens(vec![])).map(|_| Expression::Tuple(vec![])),
+            just(Token::Parens(vec![])).map(|_| Expression::FunctionArguments(vec![])),
             just(Token::Braces(vec![])).map(|_| Expression::Set(vec![])),
             just(Token::Brackets(vec![])).map(|_| Expression::List(vec![])),
             // compound nests
@@ -157,8 +157,8 @@ where
                     make_input(e.span(), trim_trailing_separator(ts))
                 }})
                 .map(|nested| match nested {
-                    Expression::Multiple(exprs) => Expression::Tuple(exprs),
-                    any => Expression::Tuple(vec![any]),
+                    Expression::Multiple(exprs) => Expression::FunctionArguments(exprs),
+                    any => Expression::FunctionArguments(vec![any]),
                 }),
             expression
                 .clone()
@@ -388,17 +388,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case("()", Tuple(vec![
+    #[case("()", FunctionArguments(vec![
     ]))]
-    #[case("(1)", Tuple(vec![
+    #[case("(1)", FunctionArguments(vec![
         Atom(Number(dec!(1))),
     ]))]
-    #[case("(1, 2, 3)", Tuple(vec![
+    #[case("(1, 2, 3)", FunctionArguments(vec![
         Atom(Number(dec!(1))),
         Atom(Number(dec!(2))),
         Atom(Number(dec!(3))),
     ]))]
-    #[case("(1, 2, 3,)", Tuple(vec![
+    #[case("(1, 2, 3,)", FunctionArguments(vec![
         Atom(Number(dec!(1))),
         Atom(Number(dec!(2))),
         Atom(Number(dec!(3))),
@@ -444,7 +444,7 @@ mod tests {
                     Operator::Relation(RelationOp::GetMember),
                     Box::new(Expression::Identifier("string".into())),
                 )),
-                Box::new(Expression::Tuple(vec![])),
+                Box::new(Expression::FunctionArguments(vec![])),
             ),
         )
     }
@@ -463,7 +463,7 @@ mod tests {
                     Operator::Relation(RelationOp::GetMember),
                     Box::new(Expression::Identifier("map".into())),
                 )),
-                Box::new(Expression::Tuple(vec![
+                Box::new(Expression::FunctionArguments(vec![
                     Expression::Identifier("x".into()),
                     Binary(
                         Box::new(Expression::Identifier("x".into())),
@@ -490,9 +490,9 @@ mod tests {
     */
 
     #[rstest]
-    #[case("a()", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::Tuple(vec![]))))]
-    #[case("a(1)", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::Tuple(vec![Atom(Number(dec!(1)))]))))]
-    #[case("a(x)", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::Tuple(vec![Expression::Identifier("x".into())]))))]
+    #[case("a()", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::FunctionArguments(vec![]))))]
+    #[case("a(1)", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::FunctionArguments(vec![Atom(Number(dec!(1)))]))))]
+    #[case("a(x)", FunctionCall(Box::new(Expression::Identifier("a".into())), Box::new(Expression::FunctionArguments(vec![Expression::Identifier("x".into())]))))]
     fn function_call(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);
     }
@@ -616,7 +616,7 @@ mod tests {
     #[case("2 in (2)", Binary(
         Box::new(Expression::Atom(Number(dec!(2)))),
         Operator::Relation(RelationOp::In),
-        Box::new(Tuple(vec![Expression::Atom(Number(dec!(2)))])),
+        Box::new(FunctionArguments(vec![Expression::Atom(Number(dec!(2)))])),
     ))]
     fn in_relation(#[case] input: &str, #[case] expected: Expression) {
         assert_parse_eq(input, expected);

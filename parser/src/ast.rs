@@ -13,7 +13,7 @@ pub enum Expression {
     FunctionCall(Box<Expression>, Box<Expression>),
     Indexer(Box<Expression>, Box<Expression>),
     List(Vec<Expression>),
-    Tuple(Vec<Expression>),
+    FunctionArguments(Vec<Expression>),
     Set(Vec<Expression>),
     Atom(Atom),
     Identifier(Identifier),
@@ -25,7 +25,7 @@ impl Expression {
     /// Used in function calls to get at the arguments.
     pub fn to_arguments(&self) -> Vec<&Expression> {
         match self {
-            Expression::Tuple(e) => e.iter().collect(),
+            Expression::FunctionArguments(e) => e.iter().collect(),
             Expression::Atom(_) => vec![self],
             _ => vec![],
         }
@@ -116,7 +116,7 @@ impl Expression {
                     e._references(variables);
                 }
             }
-            Expression::Tuple(e) => {
+            Expression::FunctionArguments(e) => {
                 for e in e {
                     e._references(variables);
                 }

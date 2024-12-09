@@ -1,3 +1,0 @@
-'hi' in ('hi', 'there')
----
-true

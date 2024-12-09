@@ -74,7 +74,6 @@ impl<'context> FunctionContext<'context> {
 pub fn size(ftx: &FunctionContext, This(this): This<Value>) -> Result<Value> {
     let size = match this {
         Value::List(l) => l.list.len(),
-        Value::Tuple(l) => l.list.len(),
         Value::Set(t) => t.set.len(),
         Value::String(s) => s.len(),
         Value::HashTag(h) => h.as_ref().len(),
@@ -118,7 +117,6 @@ pub fn contains(This(this): This<Value>, arg: Value) -> Result<Value> {
     Ok(match this {
         Value::List(v) => v.list.contains(&arg),
         Value::Set(v) => v.set.contains(&arg),
-        Value::Tuple(v) => v.list.contains(&arg),
         Value::String(s) => {
             if let Value::String(arg) = arg {
                 s.contains(arg.as_str())
@@ -160,10 +158,6 @@ pub fn starts_with(This(this): This<Value>, prefix: Value) -> Result<Value> {
             Some(v) => v == &prefix,
             _ => false,
         },
-        Value::Tuple(l) => match l.list.first() {
-            Some(v) => v == &prefix,
-            _ => false,
-        },
         _ => false,
     };
     Ok(v.into())
@@ -188,10 +182,6 @@ pub fn ends_with(This(this): This<Value>, suffix: Value) -> Result<Value> {
             seek.ends_with(&sought)
         }
         Value::List(l) => match l.list.last() {
-            Some(v) => v == &suffix,
-            _ => false,
-        },
-        Value::Tuple(l) => match l.list.last() {
             Some(v) => v == &suffix,
             _ => false,
         },
@@ -278,9 +268,6 @@ pub fn map(
         Value::List(items) => Value::List(ValueList {
             list: _apply(items.list.iter(), items.list.len(), ftx, &ident, &expr)?,
         }),
-        Value::Tuple(items) => Value::Tuple(ValueList {
-            list: _apply(items.list.iter(), items.list.len(), ftx, &ident, &expr)?,
-        }),
         Value::Set(items) => {
             Value::Set(_apply(items.set.iter(), items.set.len(), ftx, &ident, &expr)?.into())
         }
@@ -329,9 +316,6 @@ pub fn filter(
         Value::List(items) => Value::List(ValueList {
             list: _apply(items.list.iter(), items.list.len(), ftx, &ident, &expr)?,
         }),
-        Value::Tuple(items) => Value::Tuple(ValueList {
-            list: _apply(items.list.iter(), items.list.len(), ftx, &ident, &expr)?,
-        }),
         Value::Set(items) => {
             Value::Set(_apply(items.set.iter(), items.set.len(), ftx, &ident, &expr)?.into())
         }
@@ -377,7 +361,6 @@ pub fn all(
     }
     match this {
         Value::List(items) => _apply(items.list.iter(), ftx, &ident, &expr)?,
-        Value::Tuple(items) => _apply(items.list.iter(), ftx, &ident, &expr)?,
         Value::Set(items) => _apply(items.set.iter(), ftx, &ident, &expr)?,
         _ => return Err(this.error_expected_type(ValueType::List)),
     }
@@ -476,7 +459,6 @@ pub fn max(ftx: &FunctionContext, Arguments(args): Arguments) -> Result<Value> {
     let refret = match &ftx.this {
         Some(this) => match this {
             Value::List(values) => values.list.iter().try_fold(&Value::Null, _fold),
-            Value::Tuple(values) => values.list.iter().try_fold(&Value::Null, _fold),
             Value::Set(values) => values.set.iter().try_fold(&Value::Null, _fold),
             _ => Err(ExecutionError::NotSupportedAsMethod {
                 method: "max".to_string(),
@@ -488,7 +470,6 @@ pub fn max(ftx: &FunctionContext, Arguments(args): Arguments) -> Result<Value> {
                 // if we only have one multi valued item, call max on it
                 match &(args.list[0]) {
                     Value::List(values) => values.list.iter().try_fold(&Value::Null, _fold),
-                    Value::Tuple(values) => values.list.iter().try_fold(&Value::Null, _fold),
                     Value::Set(values) => values.set.iter().try_fold(&Value::Null, _fold),
                     _ => return Ok(args.list[0].clone()),
                 }
