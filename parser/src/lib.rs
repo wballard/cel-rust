@@ -35,6 +35,9 @@ pub use atoms::*;
 mod markers;
 pub use markers::*;
 
+mod regex;
+pub use regex::*;
+
 /// Parses a CEL expression into an AST ready for analysis and evaluation.
 ///
 /// # Example

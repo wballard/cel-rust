@@ -1,10 +1,53 @@
 pub use crate::datetime::*;
 pub use crate::identifiers::*;
 pub use crate::numbers::*;
+use crate::parse_regex;
 pub use crate::string::*;
 pub use crate::units::*;
 use chumsky::prelude::*;
 use std::fmt::*;
+
+/// Wrap up a regex to implement Eq, Display, Hash.
+#[derive(Debug, Clone)]
+pub struct RegexWrapper(pub regex::Regex);
+
+impl PartialEq for RegexWrapper {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_str() == other.0.as_str()
+    }
+}
+
+impl Eq for RegexWrapper {}
+
+impl std::hash::Hash for RegexWrapper {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.as_str().hash(state)
+    }
+}
+
+impl Display for RegexWrapper {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "/{}/", self.0)
+    }
+}
+
+impl From<regex::Regex> for RegexWrapper {
+    fn from(regex: regex::Regex) -> Self {
+        RegexWrapper(regex)
+    }
+}
+
+impl From<RegexWrapper> for String {
+    fn from(regex: RegexWrapper) -> Self {
+        regex.0.as_str().to_string()
+    }
+}
+
+impl From<regex::Regex> for Atom {
+    fn from(regex: regex::Regex) -> Self {
+        Atom::Regex(RegexWrapper::from(regex))
+    }
+}
 
 /// Represents an atomic value in an expression.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
@@ -17,6 +60,7 @@ pub enum Atom {
     DateTime(chrono::DateTime<chrono::Utc>),
     Duration(chrono::Duration),
     HashTag(HashTag),
+    Regex(RegexWrapper),
 }
 
 impl Display for Atom {
@@ -30,6 +74,7 @@ impl Display for Atom {
             Atom::DateTime(d) => write!(f, "{}", d),
             Atom::Duration(d) => write!(f, "{}s", d.num_seconds()),
             Atom::HashTag(h) => write!(f, "{}", h),
+            Atom::Regex(r) => write!(f, "{}", r),
         }
     }
 }
@@ -94,5 +139,6 @@ pub fn parse_atom<'a>() -> impl Parser<'a, &'a str, Atom, extra::Err<Rich<'a, ch
         parse_number().map(Atom::Number),
         parse_hashtag().map(Atom::HashTag),
         parse_string().map(Atom::String),
+        parse_regex().map(|r| Atom::Regex(r.into())),
     ))
 }

@@ -78,6 +78,7 @@ pub enum Value {
     Null,
     Ulid(ulid::Ulid),
     HashTag(HashTag),
+    Regex(RegexWrapper),
 }
 
 impl Value {
@@ -160,6 +161,7 @@ pub enum ValueType {
     Tag,
     TagSet,
     Range,
+    Regex,
 }
 
 impl Display for ValueType {
@@ -179,6 +181,7 @@ impl Display for ValueType {
             ValueType::Ulid => write!(f, "ulid"),
             ValueType::Tag => write!(f, "tag"),
             ValueType::Range => write!(f, "range"),
+            ValueType::Regex => write!(f, "regex"),
         }
     }
 }
@@ -199,6 +202,7 @@ impl Value {
             Value::HashTag(_) => ValueType::Tag,
             Value::Set(_) => ValueType::TagSet,
             Value::Range(_, _) => ValueType::Range,
+            Value::Regex(_) => ValueType::Regex,
         }
     }
 
@@ -247,6 +251,7 @@ impl Display for Value {
             Value::Ulid(v) => write!(f, "&{}", v),
             Value::HashTag(v) => write!(f, "{}", v),
             Value::Range(low, high) => write!(f, "{}..{}", low, high),
+            Value::Regex(v) => write!(f, "{}", v),
         }
     }
 }
@@ -364,6 +369,7 @@ impl std::hash::Hash for Value {
                 low.hash(state);
                 high.hash(state);
             }
+            Value::Regex(v) => v.hash(state),
         }
     }
 }
@@ -700,6 +706,7 @@ impl<'a> Value {
             Value::Ulid(_) => true,
             Value::HashTag(_) => true,
             Value::Range(_, _) => true,
+            Value::Regex(_) => true,
         }
     }
 }
@@ -716,6 +723,7 @@ impl From<&Atom> for Value {
             Atom::DateTime(v) => Value::Timestamp(*v),
             Atom::Duration(v) => Value::Duration(*v),
             Atom::HashTag(v) => Value::HashTag(v.clone()),
+            Atom::Regex(v) => Value::Regex(v.clone()),
         }
     }
 }

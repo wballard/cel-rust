@@ -198,10 +198,15 @@ pub fn ends_with(This(this): This<Value>, suffix: Value) -> Result<Value> {
 /// ```
 pub fn matches(ftx: &FunctionContext, This(this): This<Value>, regex: Value) -> Result<bool> {
     let haystack: String = this.into();
-    let pattern: String = regex.into();
-    match regex::Regex::new(&pattern) {
-        Ok(re) => Ok(re.is_match(&haystack)),
-        Err(err) => Err(ftx.error(format!("'{pattern}' not a valid regex:\n{err}"))),
+    match regex {
+        Value::Regex(re) => Ok(re.0.is_match(&haystack)),
+        _ => {
+            let pattern: String = regex.into();
+            match regex::Regex::new(&pattern) {
+                Ok(re) => Ok(re.is_match(&haystack)),
+                Err(err) => Err(ftx.error(format!("'{pattern}' not a valid regex:\n{err}"))),
+            }
+        }
     }
 }
 
